@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+/* Pointer cursor on all CTAs: buttons, links, clickable text */
+button,
+a,
+[role="button"] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
