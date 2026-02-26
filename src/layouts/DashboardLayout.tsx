@@ -1,17 +1,21 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { FiBell, FiSettings } from 'react-icons/fi';
 import { clearStoredToken, useCurrentUser } from '../api/auth';
-
-const navItems = [
-  { to: '/dashboard', label: 'Dashboard', end: true },
-  { to: '/dashboard/users', label: 'User management', end: false },
-  { to: '/dashboard/complaints', label: 'Complaint management', end: false },
-];
+import { canAccessModule, NAV_MODULES, getModuleIdFromPath } from '../config/roles';
 
 export function DashboardLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data } = useCurrentUser();
   const user = data?.user;
+  const visibleNavItems = user
+    ? NAV_MODULES.filter((item) => canAccessModule(user.role, item.moduleId, user.roleModules))
+    : NAV_MODULES;
+
+  const currentModuleId = getModuleIdFromPath(location.pathname);
+  const canAccessCurrent =
+    !currentModuleId || !user || canAccessModule(user.role, currentModuleId, user.roleModules);
+  const redirectToDashboard = user && currentModuleId && !canAccessCurrent;
 
   function handleLogout() {
     clearStoredToken();
@@ -25,10 +29,10 @@ export function DashboardLayout() {
           <h1 className="text-lg font-semibold text-slate-800">Quasmo CRM</h1>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
-          {navItems.map(({ to, label, end }) => (
+          {visibleNavItems.map(({ path, label, end }) => (
             <NavLink
-              key={to}
-              to={to}
+              key={path}
+              to={path}
               end={end}
               className={({ isActive }) =>
                 `rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -74,7 +78,7 @@ export function DashboardLayout() {
           </button>
         </header>
         <main className="min-h-0 flex-1 overflow-auto p-6">
-          <Outlet />
+          {redirectToDashboard ? <Navigate to="/dashboard" replace /> : <Outlet />}
         </main>
       </div>
     </div>

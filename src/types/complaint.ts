@@ -5,11 +5,21 @@ export interface ComplaintUser {
   _id: string;
   fullName: string;
   email: string;
+  phone?: string;
+}
+
+export interface ComplaintComment {
+  _id: string;
+  author: ComplaintUser | string;
+  text: string;
+  createdAt: string;
 }
 
 export interface Complaint {
   _id: string;
   user: ComplaintUser | string;
+  /** User assigned to handle this complaint */
+  assignedTo?: ComplaintUser | string | null;
   subject: string;
   description: string;
   status: ComplaintStatus;
@@ -18,6 +28,9 @@ export interface Complaint {
   serialNumber?: string;
   orderReference?: string;
   internalNotes?: string;
+  /** ImageKit URLs – shown when status is in_progress or resolved */
+  images?: string[];
+  comments?: ComplaintComment[];
   createdAt: string;
   updatedAt: string;
 }
@@ -39,6 +52,7 @@ export interface CreateComplaintPayload {
   productModel?: string;
   serialNumber?: string;
   orderReference?: string;
+  assignedTo?: string;
 }
 
 export interface UpdateComplaintPayload {
@@ -50,6 +64,7 @@ export interface UpdateComplaintPayload {
   serialNumber?: string;
   orderReference?: string;
   internalNotes?: string;
+  assignedTo?: string | null;
 }
 
 export const STATUS_OPTIONS: { value: ComplaintStatus; label: string }[] = [

@@ -34,6 +34,8 @@ export interface DataTableProps<T> {
     value: string;
     onChange: (value: string) => void;
     placeholder?: string;
+    /** Called when user presses Enter in the search input */
+    onSearchSubmit?: () => void;
   };
   filters?: ReactNode;
   exportCsv?: {
@@ -82,6 +84,12 @@ export function DataTable<T extends object>({
                   type="search"
                   value={search.value}
                   onChange={(e) => search.onChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      search.onSearchSubmit?.();
+                    }
+                  }}
                   placeholder={search.placeholder ?? 'Search...'}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />

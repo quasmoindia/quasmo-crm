@@ -6,7 +6,10 @@ import { Home } from './pages/Home';
 import { SignUp } from './pages/SignUp';
 import { Dashboard } from './pages/Dashboard';
 import { UserManagement } from './pages/UserManagement';
+import { RoleManagement } from './pages/RoleManagement';
 import { ComplaintManagement } from './pages/ComplaintManagement';
+import { LeadManagement } from './pages/LeadManagement';
+// import { PlaceholderModule } from './pages/PlaceholderModule'; // used by sales/finance/content routes when enabled
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,7 +36,14 @@ function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="users" element={<UserManagement />} />
+            <Route path="roles" element={<RoleManagement />} />
             <Route path="complaints" element={<ComplaintManagement />} />
+            <Route path="leads" element={<LeadManagement />} />
+            {/* Sales / Finance / Content – commented for now
+            <Route path="sales" element={<PlaceholderModule title="Sales management" />} />
+            <Route path="finance" element={<PlaceholderModule title="Finance management" />} />
+            <Route path="content" element={<PlaceholderModule title="Content" />} />
+            */}
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
