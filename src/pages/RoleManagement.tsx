@@ -26,7 +26,7 @@ export function RoleManagement() {
       key: 'actions',
       label: '',
       render: (r: RoleRecord) => (
-        <Button variant="outline" size="sm" onClick={() => setEditingRole(r)}>
+        <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => setEditingRole(r)}>
           Edit
         </Button>
       ),

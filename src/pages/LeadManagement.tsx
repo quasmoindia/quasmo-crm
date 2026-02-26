@@ -25,7 +25,7 @@ import {
   exportLeadsApi,
 } from '../api/leads';
 import { useCurrentUser } from '../api/auth';
-import type { Lead, LeadStatus, CreateLeadPayload } from '../types/lead';
+import type { Lead, LeadStatus, LeadSource, CreateLeadPayload } from '../types/lead';
 import { LEAD_STATUS_OPTIONS, LEAD_SOURCE_OPTIONS, LEAD_STATUS_STYLES } from '../types/lead';
 
 const KANBAN_LIMIT = 500;
@@ -248,7 +248,7 @@ export function LeadManagement() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<LeadStatus | ''>('');
-  const [assignedFilter, setAssignedFilter] = useState('');
+  const [assignedFilter] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
@@ -553,7 +553,7 @@ function CreateLeadModal({
       email: email.trim() || undefined,
       company: company.trim() || undefined,
       status,
-      source: source.trim() || undefined,
+      source: (source.trim() || undefined) as LeadSource | undefined,
       notes: notes.trim() || undefined,
       assignedTo: assignedTo || undefined,
     };
@@ -817,7 +817,7 @@ function LeadDetailModal({
   function handleSave() {
     if (!id) return;
     updateMutation.mutate(
-      { id, payload: { name, phone, email: email || undefined, company: company || undefined, status, source: source || undefined, notes: notes || undefined, assignedTo: assignedTo || null } },
+      { id, payload: { name, phone, email: email || undefined, company: company || undefined, status, source: (source || undefined) as LeadSource | undefined, notes: notes || undefined, assignedTo: assignedTo || null } },
       { onSuccess: () => setEditing(false) }
     );
   }
