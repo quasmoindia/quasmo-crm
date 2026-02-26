@@ -863,7 +863,7 @@ function ComplaintDetailModal({
     e.stopPropagation();
     setIsDraggingPhotos(false);
     if (totalImageSlots <= 0) return;
-    const files = Array.from(e.dataTransfer.files || []);
+    const files = getAcceptedImageFiles(e.dataTransfer.files);
     if (files.length) addPendingImages(files);
   }
 
@@ -1128,9 +1128,9 @@ function ComplaintDetailModal({
                   multiple
                   className="hidden"
                   onChange={(e) => {
-                    const files = e.target.files;
-                    if (files?.length && totalImageSlots > 0) {
-                      addPendingImages(Array.from(files));
+                    const files = getAcceptedImageFiles(e.target.files);
+                    if (files.length && totalImageSlots > 0) {
+                      addPendingImages(files);
                       e.target.value = '';
                     }
                   }}
