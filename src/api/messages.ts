@@ -25,6 +25,10 @@ export function sendMessageApi(payload: { toUserId: string; body: string }) {
   return post<MessageRecord>(`${MESSAGES_BASE}/send`, payload);
 }
 
+export function sendMessageToPhoneApi(payload: { toPhone: string; body: string }) {
+  return post<MessageRecord>(`${MESSAGES_BASE}/send`, payload);
+}
+
 export function messagesThreadKey(toUserId: string) {
   return ['messages', 'thread', toUserId] as const;
 }
@@ -44,5 +48,11 @@ export function useSendMessage(toUserId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: messagesThreadKey(toUserId) });
     },
+  });
+}
+
+export function useSendMessageToPhone() {
+  return useMutation({
+    mutationFn: (payload: { toPhone: string; body: string }) => sendMessageToPhoneApi(payload),
   });
 }

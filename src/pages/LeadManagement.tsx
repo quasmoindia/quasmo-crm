@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { FiList, FiGrid, FiUpload, FiDownload } from 'react-icons/fi';
+import { FiList, FiGrid, FiUpload, FiDownload, FiMessageCircle } from 'react-icons/fi';
 import {
   DndContext,
   type DragEndEvent,
@@ -24,6 +24,7 @@ import {
   useBulkUploadLeads,
   exportLeadsApi,
 } from '../api/leads';
+import { useSendMessageToPhone } from '../api/messages';
 import { useCurrentUser } from '../api/auth';
 import type { Lead, LeadStatus, LeadSource, CreateLeadPayload } from '../types/lead';
 import { LEAD_STATUS_OPTIONS, LEAD_SOURCE_OPTIONS, LEAD_STATUS_STYLES } from '../types/lead';
@@ -59,11 +60,13 @@ function assignedToName(lead: Lead) {
 function LeadKanbanCard({
   lead,
   onView,
+  onMessage,
   onDelete,
   canDelete,
 }: {
   lead: Lead;
   onView: (id: string) => void;
+  onMessage: (l: Lead) => void;
   onDelete: (l: Lead) => void;
   canDelete: boolean;
 }) {
@@ -102,6 +105,18 @@ function LeadKanbanCard({
         >
           View
         </button>
+        {lead.phone && (
+          <button
+            type="button"
+            onClick={() => onMessage(lead)}
+            className="text-xs text-indigo-600 hover:text-indigo-800"
+            title="Send message"
+            aria-label="Message lead"
+          >
+            <FiMessageCircle className="mr-0.5 inline size-3.5" aria-hidden />
+            Message
+          </button>
+        )}
         {canDelete && (
           <button
             type="button"
@@ -128,6 +143,7 @@ function LeadKanbanColumn({
   label,
   leads,
   onView,
+  onMessage,
   onDelete,
   canDelete,
 }: {
@@ -135,6 +151,7 @@ function LeadKanbanColumn({
   label: string;
   leads: Lead[];
   onView: (id: string) => void;
+  onMessage: (l: Lead) => void;
   onDelete: (l: Lead) => void;
   canDelete: boolean;
 }) {
@@ -154,7 +171,7 @@ function LeadKanbanColumn({
       </h3>
       <div className="flex flex-col gap-2">
         {leads.map((l) => (
-          <LeadKanbanCard key={l._id} lead={l} onView={onView} onDelete={onDelete} canDelete={canDelete} />
+          <LeadKanbanCard key={l._id} lead={l} onView={onView} onMessage={onMessage} onDelete={onDelete} canDelete={canDelete} />
         ))}
       </div>
     </div>
@@ -165,6 +182,7 @@ function LeadKanbanBoard({
   leads,
   isLoading,
   onView,
+  onMessage,
   onDelete,
   onStatusChange,
   isUpdating,
@@ -173,6 +191,7 @@ function LeadKanbanBoard({
   leads: Lead[];
   isLoading: boolean;
   onView: (id: string) => void;
+  onMessage: (l: Lead) => void;
   onDelete: (l: Lead) => void;
   onStatusChange: (params: { id: string; payload: { status: LeadStatus } }) => void;
   isUpdating: boolean;
@@ -230,6 +249,7 @@ function LeadKanbanBoard({
             label={label}
             leads={list}
             onView={onView}
+            onMessage={onMessage}
             onDelete={onDelete}
             canDelete={canDelete}
           />
@@ -254,6 +274,7 @@ export function LeadManagement() {
   const [createOpen, setCreateOpen] = useState(false);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [messageTarget, setMessageTarget] = useState<{ name: string; phone: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null);
   const [exportLoading, setExportLoading] = useState<'csv' | 'xlsx' | null>(null);
 
@@ -343,6 +364,18 @@ export function LeadManagement() {
           >
             View
           </button>
+          {l.phone && (
+            <button
+              type="button"
+              onClick={() => setMessageTarget({ name: l.name, phone: l.phone })}
+              className="mr-2 text-indigo-600 hover:text-indigo-800"
+              title="Send message"
+              aria-label="Message lead"
+            >
+              <FiMessageCircle className="mr-0.5 inline size-3.5" aria-hidden />
+              Message
+            </button>
+          )}
           {isAdmin && (
             <button
               type="button"
@@ -438,6 +471,7 @@ export function LeadManagement() {
               leads={leads}
               isLoading={isLoading}
               onView={(id) => setDetailId(id)}
+              onMessage={(l) => setMessageTarget({ name: l.name, phone: l.phone })}
               onDelete={(l) => setDeleteTarget(l)}
               onStatusChange={updateMutation.mutate}
               isUpdating={updateMutation.isPending}
@@ -498,8 +532,17 @@ export function LeadManagement() {
         <LeadDetailModal
           id={detailId}
           onClose={() => setDetailId(null)}
+          onMessage={setMessageTarget}
           setDeleteTarget={setDeleteTarget}
           canDelete={isAdmin}
+        />
+      )}
+
+      {messageTarget && (
+        <LeadMessageModal
+          name={messageTarget.name}
+          phone={messageTarget.phone}
+          onClose={() => setMessageTarget(null)}
         />
       )}
 
@@ -778,11 +821,13 @@ function BulkUploadModal({
 function LeadDetailModal({
   id,
   onClose,
+  onMessage,
   setDeleteTarget,
   canDelete,
 }: {
   id: string;
   onClose: () => void;
+  onMessage: (lead: { name: string; phone: string }) => void;
   setDeleteTarget: (l: Lead | null) => void;
   canDelete: boolean;
 }) {
@@ -884,6 +929,12 @@ function LeadDetailModal({
                 <div className="flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-4">
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setEditing(true)}>Edit</Button>
+                    {lead.phone && (
+                      <Button variant="outline" onClick={() => onMessage({ name: lead.name, phone: lead.phone })}>
+                        <FiMessageCircle className="mr-1 inline size-4" aria-hidden />
+                        Message
+                      </Button>
+                    )}
                     {canDelete && (
                       <Button variant="outline" onClick={() => { setDeleteTarget(lead); onClose(); }} className="text-red-600 border-red-200 hover:bg-red-50">
                         Delete
@@ -896,6 +947,85 @@ function LeadDetailModal({
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function LeadMessageModal({
+  name,
+  phone,
+  onClose,
+}: {
+  name: string;
+  phone: string;
+  onClose: () => void;
+}) {
+  const [body, setBody] = useState('');
+  const sendMutation = useSendMessageToPhone();
+
+  const handleSend = () => {
+    const text = body.trim();
+    if (!text) return;
+    sendMutation.mutate(
+      { toPhone: phone, body: text },
+      {
+        onSuccess: () => setBody(''),
+        onError: () => {},
+      }
+    );
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lead-message-title"
+    >
+      <div
+        className="flex w-full max-w-md flex-col rounded-xl bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 p-4">
+          <div>
+            <h2 id="lead-message-title" className="text-lg font-semibold text-slate-800">
+              Message {name}
+            </h2>
+            <p className="mt-0.5 text-sm text-slate-500">{phone}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close"
+          >
+            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex flex-col gap-2 border-t border-slate-200 p-4">
+          {sendMutation.isError && (
+            <p className="text-sm text-red-600">{(sendMutation.error as Error).message}</p>
+          )}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
+              placeholder="Type a message…"
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              disabled={sendMutation.isPending}
+            />
+            <Button onClick={handleSend} loading={sendMutation.isPending} disabled={!body.trim()}>
+              Send
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">SMS will be sent via Twilio to the lead&apos;s phone.</p>
+        </div>
       </div>
     </div>
   );

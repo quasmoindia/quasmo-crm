@@ -22,6 +22,8 @@ export interface Complaint {
   assignedTo?: ComplaintUser | string | null;
   subject: string;
   description: string;
+  /** Optional contact phone for SMS */
+  phone?: string;
   status: ComplaintStatus;
   priority: ComplaintPriority;
   productModel?: string;
@@ -48,6 +50,7 @@ export interface ComplaintsListResponse {
 export interface CreateComplaintPayload {
   subject: string;
   description: string;
+  phone?: string;
   priority?: ComplaintPriority;
   productModel?: string;
   serialNumber?: string;
@@ -58,6 +61,7 @@ export interface CreateComplaintPayload {
 export interface UpdateComplaintPayload {
   subject?: string;
   description?: string;
+  phone?: string;
   status?: ComplaintStatus;
   priority?: ComplaintPriority;
   productModel?: string;

@@ -25,7 +25,7 @@ import {
   useComplaintAssignableUsers,
 } from '../api/complaints';
 import { useCurrentUser } from '../api/auth';
-import { useMessagesThread, useSendMessage } from '../api/messages';
+import { useSendMessageToPhone } from '../api/messages';
 import type { Complaint, ComplaintStatus, ComplaintPriority, ComplaintComment } from '../types/complaint';
 import { STATUS_OPTIONS, PRIORITY_OPTIONS } from '../types/complaint';
 
@@ -89,18 +89,24 @@ function assignedToName(complaint: Complaint) {
   return '—';
 }
 
-/** User to message (complaint's user). Only when user is populated. */
-function getMessageTarget(complaint: Complaint): { _id: string; fullName: string; phone?: string } | null {
-  const u = complaint.user;
-  if (typeof u !== 'object' || !u?._id) return null;
-  return { _id: u._id, fullName: u.fullName ?? '—', phone: (u as { phone?: string }).phone };
+function userPhone(complaint: Complaint): string | null {
+  const phone = complaint.phone?.trim() || (typeof complaint.user === 'object' && complaint.user?.phone?.trim());
+  return phone || null;
+}
+
+/** Contact to message: complaint phone or user phone. Only when we have a phone. */
+function getMessageTarget(complaint: Complaint): { name: string; phone: string } | null {
+  const phone = complaint.phone?.trim() || (typeof complaint.user === 'object' && complaint.user?.phone?.trim());
+  if (!phone) return null;
+  const name = typeof complaint.user === 'object' ? (complaint.user.fullName ?? 'Contact') : 'Contact';
+  return { name, phone };
 }
 
 function buildComplaintCsvRows(complaints: Complaint[]): (string | number)[][] {
-  const headers = ['Subject', 'User', 'Assigned to', 'Status', 'Priority', 'Product', 'Created'];
+  const headers = ['Subject', 'Phone', 'Assigned to', 'Status', 'Priority', 'Product', 'Created'];
   const rows = complaints.map((c) => [
     c.subject,
-    userName(c),
+    userPhone(c) ?? '',
     assignedToName(c),
     c.status,
     c.priority,
@@ -119,7 +125,7 @@ function KanbanCard({
 }: {
   complaint: Complaint;
   onView: (id: string) => void;
-  onMessage: (user: { _id: string; fullName: string; phone?: string }) => void;
+  onMessage: (target: { name: string; phone: string }) => void;
   onDelete: (c: Complaint) => void;
   canDelete: boolean;
 }) {
@@ -143,6 +149,9 @@ function KanbanCard({
         >
           <p className="truncate font-medium text-slate-800">{complaint.subject}</p>
           <p className="mt-0.5 text-xs text-slate-500">{userName(complaint)}</p>
+          {userPhone(complaint) && (
+            <p className="mt-0.5 text-xs text-slate-400">{userPhone(complaint)}</p>
+          )}
           {assignedToName(complaint) !== '—' && (
             <p className="mt-0.5 text-xs text-slate-500">Assigned: {assignedToName(complaint)}</p>
           )}
@@ -199,7 +208,7 @@ function KanbanColumn({
   label: string;
   complaints: Complaint[];
   onView: (id: string) => void;
-  onMessage: (user: { _id: string; fullName: string; phone?: string }) => void;
+  onMessage: (target: { name: string; phone: string }) => void;
   onDelete: (c: Complaint) => void;
   canDelete: boolean;
 }) {
@@ -245,7 +254,7 @@ function ComplaintKanbanBoard({
   complaints: Complaint[];
   isLoading: boolean;
   onView: (id: string) => void;
-  onMessage: (user: { _id: string; fullName: string; phone?: string }) => void;
+  onMessage: (target: { name: string; phone: string }) => void;
   onDelete: (c: Complaint) => void;
   onStatusChange: (params: { id: string; payload: { status: ComplaintStatus } }) => void;
   isUpdating: boolean;
@@ -342,7 +351,7 @@ export function ComplaintManagement() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Complaint | null>(null);
-  const [messageTarget, setMessageTarget] = useState<{ _id: string; fullName: string; phone?: string } | null>(null);
+  const [messageTarget, setMessageTarget] = useState<{ name: string; phone: string } | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput), DEBOUNCE_MS);
@@ -460,7 +469,7 @@ export function ComplaintManagement() {
 
   const columns = [
     { key: 'subject', label: 'Subject', render: (c: Complaint) => <span className="font-medium text-slate-800">{c.subject}</span> },
-    { key: 'user', label: 'User', render: (c: Complaint) => userName(c) },
+    { key: 'phone', label: 'Phone', render: (c: Complaint) => userPhone(c) ?? '—' },
     { key: 'assignedTo', label: 'Assigned to', render: (c: Complaint) => assignedToName(c) },
     { key: 'status', label: 'Status', render: (c: Complaint) => <StatusBadge status={c.status} /> },
     { key: 'priority', label: 'Priority', render: (c: Complaint) => <PriorityBadge priority={c.priority} /> },
@@ -525,7 +534,7 @@ export function ComplaintManagement() {
               complaints={complaints}
               isLoading={isLoading}
               onView={(id) => setDetailId(id)}
-              onMessage={(user) => setMessageTarget(user)}
+              onMessage={(target) => setMessageTarget(target)}
               onDelete={(c) => setDeleteTarget(c)}
               onStatusChange={updateMutation.mutate}
               isUpdating={updateMutation.isPending}
@@ -609,6 +618,7 @@ export function ComplaintManagement() {
         <ComplaintDetailModal
           id={detailId}
           onClose={() => setDetailId(null)}
+          onMessage={setMessageTarget}
           setDeleteTarget={setDeleteTarget}
           updateMutation={updateMutation}
           canDelete={isAdmin}
@@ -630,7 +640,8 @@ export function ComplaintManagement() {
 
       {messageTarget && (
         <MessageModal
-          user={messageTarget}
+          name={messageTarget.name}
+          phone={messageTarget.phone}
           onClose={() => setMessageTarget(null)}
         />
       )}
@@ -651,6 +662,7 @@ function CreateComplaintModal({
   const createUsers = createUsersData?.data ?? [];
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
+  const [phone, setPhone] = useState('');
   const [priority, setPriority] = useState<ComplaintPriority>('medium');
   const [assignedTo, setAssignedTo] = useState('');
   const [productModel, setProductModel] = useState('');
@@ -669,6 +681,7 @@ function CreateComplaintModal({
       {
         subject: subject.trim(),
         description: description.trim(),
+        phone: phone.trim() || undefined,
         priority,
         assignedTo: assignedTo || undefined,
         productModel: productModel.trim() || undefined,
@@ -710,6 +723,14 @@ function CreateComplaintModal({
             required
           />
         </div>
+        <Input
+          label="Phone (optional, for SMS)"
+          type="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="+91 98765 43210"
+          disabled={mutation.isPending}
+        />
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Priority</label>
           <select
@@ -778,12 +799,14 @@ function CreateComplaintModal({
 function ComplaintDetailModal({
   id,
   onClose,
+  onMessage,
   setDeleteTarget,
   updateMutation,
   canDelete,
 }: {
   id: string;
   onClose: () => void;
+  onMessage: (target: { name: string; phone: string }) => void;
   setDeleteTarget: (c: Complaint | null) => void;
   updateMutation: ReturnType<typeof useUpdateComplaint>;
   canDelete: boolean;
@@ -794,6 +817,7 @@ function ComplaintDetailModal({
   const [status, setStatus] = useState<ComplaintStatus | ''>('');
   const [priority, setPriority] = useState<ComplaintPriority | ''>('');
   const [assignedTo, setAssignedTo] = useState('');
+  const [phone, setPhone] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
   const [editDirty, setEditDirty] = useState(false);
   const uploadImagesMutation = useUploadComplaintImages(id);
@@ -825,6 +849,7 @@ function ComplaintDetailModal({
     hasSyncedForComplaintRef.current = true;
     setStatus(complaint.status);
     setPriority(complaint.priority);
+    setPhone(complaint.phone ?? '');
     setInternalNotes(complaint.internalNotes ?? '');
     const a = complaint.assignedTo;
     setAssignedTo(typeof a === 'object' && a?._id ? a._id : typeof a === 'string' ? a : '');
@@ -890,12 +915,15 @@ function ComplaintDetailModal({
     const newPriority = (priority || complaint.priority) as ComplaintPriority;
     const newNotes = (internalNotes ?? '').trim() || undefined;
     const currentNotes = (complaint.internalNotes ?? '').trim() || undefined;
+    const newPhone = (phone ?? '').trim() || undefined;
+    const currentPhone = (complaint.phone ?? '').trim() || undefined;
     const currentAssignedId = typeof complaint.assignedTo === 'object' && complaint.assignedTo?._id
       ? complaint.assignedTo._id
       : typeof complaint.assignedTo === 'string' ? complaint.assignedTo : '';
-    const payload: { status?: ComplaintStatus; priority?: ComplaintPriority; internalNotes?: string; assignedTo?: string | null } = {};
+    const payload: { status?: ComplaintStatus; priority?: ComplaintPriority; phone?: string; internalNotes?: string; assignedTo?: string | null } = {};
     if (newStatus !== complaint.status) payload.status = newStatus;
     if (newPriority !== complaint.priority) payload.priority = newPriority;
+    if (newPhone !== currentPhone) payload.phone = newPhone;
     if (newNotes !== currentNotes) payload.internalNotes = newNotes;
     if (assignedTo !== currentAssignedId) payload.assignedTo = assignedTo || null;
 
@@ -938,10 +966,15 @@ function ComplaintDetailModal({
             <p className="text-sm font-medium text-slate-500">Description</p>
             <p className="whitespace-pre-wrap text-slate-800">{complaint.description}</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div>
               <p className="text-sm font-medium text-slate-500">User</p>
               <p className="text-slate-800">{userName(complaint)}</p>
+              {userPhone(complaint) && <p className="mt-0.5 text-sm text-slate-600">{userPhone(complaint)}</p>}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500">Contact phone</p>
+              <p className="text-slate-800">{complaint.phone || '—'}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-slate-500">Created</p>
@@ -960,8 +993,8 @@ function ComplaintDetailModal({
           )}
 
           <hr className="border-slate-200" />
-          <p className="text-sm font-medium text-slate-700">Update status / priority / assignee</p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <p className="text-sm font-medium text-slate-700">Update status / priority / assignee / phone</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
               <label className="mb-1 block text-sm text-slate-600">Status</label>
               <select
@@ -995,6 +1028,19 @@ function ComplaintDetailModal({
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-slate-600">Contact phone</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  setEditDirty(true);
+                }}
+                placeholder="+91 98765 43210"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm text-slate-600">Assigned to</label>
@@ -1164,16 +1210,28 @@ function ComplaintDetailModal({
             </p>
           )}
           <div className="flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-4">
-            {canDelete && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={openDelete}
-                className="text-red-600 border-red-200 hover:bg-red-50"
-              >
-                Delete complaint
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {getMessageTarget(complaint) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onMessage(getMessageTarget(complaint)!)}
+                >
+                  <FiMessageCircle className="mr-1 inline size-4" aria-hidden />
+                  Message
+                </Button>
+              )}
+              {canDelete && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={openDelete}
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  Delete complaint
+                </Button>
+              )}
+            </div>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={onClose}>
                 Close
@@ -1195,24 +1253,24 @@ function ComplaintDetailModal({
 }
 
 function MessageModal({
-  user,
+  name,
+  phone,
   onClose,
 }: {
-  user: { _id: string; fullName: string; phone?: string };
+  name: string;
+  phone: string;
   onClose: () => void;
 }) {
   const [body, setBody] = useState('');
-  const { data, isLoading, isError, error } = useMessagesThread(user._id);
-  const sendMutation = useSendMessage(user._id);
-  const messages = data?.data ?? [];
+  const sendMutation = useSendMessageToPhone();
 
   const handleSend = () => {
     const text = body.trim();
     if (!text) return;
-    sendMutation.mutate(text, {
-      onSuccess: () => setBody(''),
-      onError: () => {},
-    });
+    sendMutation.mutate(
+      { toPhone: phone, body: text },
+      { onSuccess: () => setBody(''), onError: () => {} }
+    );
   };
 
   return (
@@ -1221,25 +1279,15 @@ function MessageModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="message-user-title"
+      aria-labelledby="message-complaint-title"
     >
-      <div
-        className="flex w-full max-w-md flex-col rounded-xl bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxHeight: '90vh' }}
-      >
+      <div className="flex w-full max-w-md flex-col rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <div>
-            <h2 id="message-user-title" className="text-lg font-semibold text-slate-800">
-              Message {user.fullName}
+            <h2 id="message-complaint-title" className="text-lg font-semibold text-slate-800">
+              Message {name}
             </h2>
-            <p className="mt-0.5 text-sm text-slate-500">
-              {user.phone ? (
-                <span>{user.phone}</span>
-              ) : (
-                <span className="text-amber-600">No phone — add in User management</span>
-              )}
-            </p>
+            <p className="mt-0.5 text-sm text-slate-500">{phone}</p>
           </div>
           <button
             type="button"
@@ -1252,50 +1300,25 @@ function MessageModal({
             </svg>
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          {isError ? (
-            <p className="text-center text-sm text-red-600">{(error as Error).message}</p>
-          ) : isLoading ? (
-            <p className="text-center text-sm text-slate-500">Loading messages…</p>
-          ) : messages.length === 0 ? (
-            <p className="text-center text-sm text-slate-500">No messages yet. Send one below.</p>
-          ) : (
-            <ul className="space-y-3">
-              {messages.map((m) => (
-                <li
-                  key={m._id}
-                  className={`rounded-lg px-3 py-2 text-sm ${
-                    m.direction === 'outbound'
-                      ? 'ml-8 bg-indigo-100 text-indigo-900'
-                      : 'mr-8 bg-slate-100 text-slate-800'
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap">{m.body}</p>
-                  <p className="mt-1 text-xs opacity-70">{formatDate(m.createdAt)}</p>
-                </li>
-              ))}
-            </ul>
+        <div className="flex flex-col gap-2 border-t border-slate-200 p-4">
+          {sendMutation.isError && (
+            <p className="text-sm text-red-600">{(sendMutation.error as Error).message}</p>
           )}
-        </div>
-        <div className="border-t border-slate-200 p-4">
-          {!user.phone ? (
-            <p className="text-sm text-amber-600">Add a phone number in User management to send SMS.</p>
-          ) : (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-                placeholder="Type a message…"
-                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                disabled={sendMutation.isPending}
-              />
-              <Button onClick={handleSend} loading={sendMutation.isPending} disabled={!body.trim()}>
-                Send
-              </Button>
-            </div>
-          )}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
+              placeholder="Type a message…"
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              disabled={sendMutation.isPending}
+            />
+            <Button onClick={handleSend} loading={sendMutation.isPending} disabled={!body.trim()}>
+              Send
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">SMS will be sent via Twilio.</p>
         </div>
       </div>
     </div>
