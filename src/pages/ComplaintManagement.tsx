@@ -89,6 +89,11 @@ function assignedToName(complaint: Complaint) {
   return '—';
 }
 
+function staffName(field: Complaint['createdBy'] | Complaint['updatedBy'] | Complaint['closedBy']): string {
+  if (typeof field === 'object' && field?.fullName) return field.fullName;
+  return '—';
+}
+
 function userPhone(complaint: Complaint): string | null {
   const phone = complaint.phone?.trim() || (typeof complaint.user === 'object' && complaint.user?.phone?.trim());
   return phone || null;
@@ -103,7 +108,7 @@ function getMessageTarget(complaint: Complaint): { name: string; phone: string }
 }
 
 function buildComplaintCsvRows(complaints: Complaint[]): (string | number)[][] {
-  const headers = ['Subject', 'Phone', 'Assigned to', 'Status', 'Priority', 'Product', 'Created'];
+  const headers = ['Subject', 'Phone', 'Assigned to', 'Status', 'Priority', 'Product', 'Created by', 'Created', 'Updated by', 'Updated', 'Closed by', 'Closed at'];
   const rows = complaints.map((c) => [
     c.subject,
     userPhone(c) ?? '',
@@ -111,7 +116,12 @@ function buildComplaintCsvRows(complaints: Complaint[]): (string | number)[][] {
     c.status,
     c.priority,
     c.productModel ?? '',
+    staffName(c.createdBy),
     formatDate(c.createdAt),
+    staffName(c.updatedBy),
+    formatDate(c.updatedAt),
+    staffName(c.closedBy),
+    c.closedAt ? formatDate(c.closedAt) : '',
   ]);
   return [headers, ...rows];
 }
@@ -474,7 +484,12 @@ export function ComplaintManagement() {
     { key: 'status', label: 'Status', render: (c: Complaint) => <StatusBadge status={c.status} /> },
     { key: 'priority', label: 'Priority', render: (c: Complaint) => <PriorityBadge priority={c.priority} /> },
     { key: 'productModel', label: 'Product', render: (c: Complaint) => c.productModel ?? '—' },
+    { key: 'createdBy', label: 'Created by', render: (c: Complaint) => staffName(c.createdBy) },
     { key: 'createdAt', label: 'Created', render: (c: Complaint) => formatDate(c.createdAt) },
+    { key: 'updatedBy', label: 'Updated by', render: (c: Complaint) => staffName(c.updatedBy) },
+    { key: 'updatedAt', label: 'Updated', render: (c: Complaint) => formatDate(c.updatedAt) },
+    { key: 'closedBy', label: 'Closed by', render: (c: Complaint) => (c.status === 'closed' ? staffName(c.closedBy) : '—') },
+    { key: 'closedAt', label: 'Closed at', render: (c: Complaint) => (c.closedAt ? formatDate(c.closedAt) : '—') },
   ];
 
   return (
@@ -945,6 +960,7 @@ function ComplaintDetailModal({
       setEditDirty(false);
       // Allow next refetch to sync form so we show latest server state
       hasSyncedForComplaintRef.current = false;
+      onClose();
     } catch {
       // Errors shown via mutation.isError
     }
@@ -976,9 +992,29 @@ function ComplaintDetailModal({
               <p className="text-sm font-medium text-slate-500">Contact phone</p>
               <p className="text-slate-800">{complaint.phone || '—'}</p>
             </div>
-            <div>
-              <p className="text-sm font-medium text-slate-500">Created</p>
-              <p className="text-slate-800">{formatDate(complaint.createdAt)}</p>
+          </div>
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+            <p className="mb-3 text-sm font-medium text-slate-600">Audit</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Created by</p>
+                <p className="text-slate-800">{staffName(complaint.createdBy)}</p>
+                <p className="text-sm text-slate-500">{formatDate(complaint.createdAt)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Updated by</p>
+                <p className="text-slate-800">{staffName(complaint.updatedBy)}</p>
+                <p className="text-sm text-slate-500">{formatDate(complaint.updatedAt)}</p>
+              </div>
+              {(complaint.status === 'closed' && (complaint.closedBy || complaint.closedAt)) ? (
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Closed by</p>
+                  <p className="text-slate-800">{staffName(complaint.closedBy)}</p>
+                  <p className="text-sm text-slate-500">
+                    {complaint.closedAt ? formatDate(complaint.closedAt) : '—'}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </div>
           {(complaint.productModel || complaint.serialNumber || complaint.orderReference) && (
@@ -1305,16 +1341,16 @@ function MessageModal({
             <p className="text-sm text-red-600">{(sendMutation.error as Error).message}</p>
           )}
           <div className="flex gap-2">
-            <input
-              type="text"
+            <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
               placeholder="Type a message…"
-              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              rows={3}
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               disabled={sendMutation.isPending}
             />
-            <Button onClick={handleSend} loading={sendMutation.isPending} disabled={!body.trim()}>
+            <Button onClick={handleSend} loading={sendMutation.isPending} disabled={!body.trim()} className="self-end">
               Send
             </Button>
           </div>

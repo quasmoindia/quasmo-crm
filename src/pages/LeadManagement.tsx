@@ -1011,16 +1011,16 @@ function LeadMessageModal({
             <p className="text-sm text-red-600">{(sendMutation.error as Error).message}</p>
           )}
           <div className="flex gap-2">
-            <input
-              type="text"
+            <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
               placeholder="Type a message…"
-              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              rows={3}
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               disabled={sendMutation.isPending}
             />
-            <Button onClick={handleSend} loading={sendMutation.isPending} disabled={!body.trim()}>
+            <Button onClick={handleSend} loading={sendMutation.isPending} disabled={!body.trim()} className="self-end">
               Send
             </Button>
           </div>

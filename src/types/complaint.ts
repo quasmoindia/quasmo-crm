@@ -20,6 +20,14 @@ export interface Complaint {
   user: ComplaintUser | string;
   /** User assigned to handle this complaint */
   assignedTo?: ComplaintUser | string | null;
+  /** Staff who created the complaint record */
+  createdBy?: ComplaintUser | string | null;
+  /** Staff who last updated the complaint */
+  updatedBy?: ComplaintUser | string | null;
+  /** Staff who closed the complaint */
+  closedBy?: ComplaintUser | string | null;
+  /** When the complaint was closed */
+  closedAt?: string | null;
   subject: string;
   description: string;
   /** Optional contact phone for SMS */

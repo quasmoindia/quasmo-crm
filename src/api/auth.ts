@@ -1,6 +1,13 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { get, post } from '../utils/api';
-import type { AuthResponse, AuthUser, LoginCredentials, SignUpCredentials } from '../types/auth';
+import type {
+  AuthResponse,
+  AuthUser,
+  LoginCredentials,
+  LoginWithOtpPayload,
+  RequestOtpPayload,
+  SignUpCredentials,
+} from '../types/auth';
 
 const AUTH_BASE = '/auth';
 
@@ -21,6 +28,14 @@ export function useCurrentUser() {
 
 export function loginApi(credentials: LoginCredentials) {
   return post<AuthResponse>(`${AUTH_BASE}/login`, credentials);
+}
+
+export function requestOtpApi(payload: RequestOtpPayload) {
+  return post<{ message: string }>(`${AUTH_BASE}/request-otp`, payload);
+}
+
+export function loginWithOtpApi(payload: LoginWithOtpPayload) {
+  return post<AuthResponse>(`${AUTH_BASE}/login-otp`, payload);
 }
 
 export function signUpApi(credentials: SignUpCredentials) {
@@ -44,6 +59,19 @@ export function clearStoredToken(): void {
 export function useLoginMutation() {
   return useMutation({
     mutationFn: loginApi,
+    onSuccess: (data) => {
+      setStoredToken(data.token);
+    },
+  });
+}
+
+export function useRequestOtpMutation() {
+  return useMutation({ mutationFn: requestOtpApi });
+}
+
+export function useLoginWithOtpMutation() {
+  return useMutation({
+    mutationFn: loginWithOtpApi,
     onSuccess: (data) => {
       setStoredToken(data.token);
     },

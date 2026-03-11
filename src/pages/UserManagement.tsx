@@ -64,6 +64,7 @@ export function UserManagement() {
   const columns = [
     { key: 'fullName', label: 'Full name', render: (u: UserRecord) => <span className="font-medium text-slate-800">{u.fullName}</span> },
     { key: 'email', label: 'Email', render: (u: UserRecord) => u.email },
+    { key: 'phone', label: 'Phone', render: (u: UserRecord) => u.phone ?? '—' },
     { key: 'role', label: 'Role', render: (u: UserRecord) => <span className="capitalize">{getRoleLabel(u.role, roleLabels)}</span> },
     { key: 'createdAt', label: 'Created', render: (u: UserRecord) => formatDate(u.createdAt) },
     {
@@ -227,7 +228,7 @@ function CreateUserModal({
             autoComplete="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="+1 234 567 8900"
+            placeholder="10-digit mobile e.g. 9876543210"
             disabled={mutation.isPending}
           />
           <div>
@@ -362,7 +363,7 @@ function EditUserModal({
             autoComplete="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="+1 234 567 8900"
+            placeholder="10-digit mobile e.g. 9876543210"
             disabled={mutation.isPending}
           />
           <div>
