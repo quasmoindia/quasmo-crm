@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FiList, FiGrid, FiUpload, FiImage, FiMessageCircle } from 'react-icons/fi';
+import { FiList, FiGrid, FiUpload, FiFile, FiMessageCircle, FiCopy } from 'react-icons/fi';
 import {
   DndContext,
   type DragEndEvent,
@@ -32,6 +32,16 @@ import { STATUS_OPTIONS, PRIORITY_OPTIONS } from '../types/complaint';
 const KANBAN_LIMIT = 500;
 
 const DEBOUNCE_MS = 300;
+
+function fileIsImage(f: File): boolean {
+  return f.type.startsWith('image/');
+}
+
+/** Heuristic for CDN URLs that end with an image extension before query string. */
+function urlLooksLikeImage(url: string): boolean {
+  const path = url.split('?')[0]?.split('#')[0] ?? '';
+  return /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(path);
+}
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -70,9 +80,14 @@ function PriorityBadge({ priority }: { priority: ComplaintPriority }) {
     medium: 'bg-yellow-100 text-yellow-800',
     high: 'bg-red-100 text-red-800',
   };
+  const labels: Record<ComplaintPriority, string> = {
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+  };
   return (
     <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[priority]}`}>
-      {priority}
+      {labels[priority]}
     </span>
   );
 }
@@ -89,6 +104,19 @@ function assignedToName(complaint: Complaint) {
   return '—';
 }
 
+function staffName(field: Complaint['createdBy'] | Complaint['updatedBy'] | Complaint['closedBy']): string {
+  if (typeof field === 'object' && field?.fullName) return field.fullName;
+  return '—';
+}
+
+/** Phone on the linked user account (not the complaint contact line). */
+function linkedUserAccountPhone(complaint: Complaint): string | null {
+  if (typeof complaint.user === 'object' && complaint.user?.phone?.trim()) {
+    return complaint.user.phone.trim();
+  }
+  return null;
+}
+
 function userPhone(complaint: Complaint): string | null {
   const phone = complaint.phone?.trim() || (typeof complaint.user === 'object' && complaint.user?.phone?.trim());
   return phone || null;
@@ -102,18 +130,100 @@ function getMessageTarget(complaint: Complaint): { name: string; phone: string }
   return { name, phone };
 }
 
+function complaintTicketLabel(c: Complaint): string {
+  return c.ticketId?.trim() || '—';
+}
+
+function TicketIdWithCopy({
+  complaint,
+  textClassName = 'font-mono text-xs font-semibold text-indigo-700',
+  iconClassName = 'size-3.5',
+}: {
+  complaint: Complaint;
+  /** Classes for the ticket id text span */
+  textClassName?: string;
+  iconClassName?: string;
+}) {
+  const label = complaintTicketLabel(complaint);
+  const raw = complaint.ticketId?.trim();
+  const canCopy = Boolean(raw);
+
+  async function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!raw) return;
+    try {
+      await navigator.clipboard.writeText(raw);
+    } catch {
+      /* clipboard may be blocked */
+    }
+  }
+
+  return (
+    <div className="inline-flex min-w-0 max-w-full items-center gap-1">
+      <span className={`min-w-0 truncate ${textClassName}`} title={label}>
+        {label}
+      </span>
+      {canCopy ? (
+        <button
+          type="button"
+          onClick={handleCopy}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="shrink-0 rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+          title="Copy ticket ID"
+          aria-label={`Copy ticket ID ${raw}`}
+        >
+          <FiCopy className={iconClassName} aria-hidden />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function buildComplaintCsvRows(complaints: Complaint[]): (string | number)[][] {
-  const headers = ['Subject', 'Phone', 'Assigned to', 'Status', 'Priority', 'Product', 'Created'];
+  const headers = [
+    'Ticket ID',
+    'Subject',
+    'Phone',
+    'Assigned to',
+    'Status',
+    'Priority',
+    'Product',
+    'Created (by / at)',
+    'Updated (by / at)',
+    'Closed (by / at)',
+  ];
   const rows = complaints.map((c) => [
+    complaintTicketLabel(c),
     c.subject,
     userPhone(c) ?? '',
     assignedToName(c),
     c.status,
     c.priority,
     c.productModel ?? '',
-    formatDate(c.createdAt),
+    `${staffName(c.createdBy)} · ${formatDate(c.createdAt)}`,
+    `${staffName(c.updatedBy)} · ${formatDate(c.updatedAt)}`,
+    c.status === 'closed'
+      ? `${staffName(c.closedBy)} · ${c.closedAt ? formatDate(c.closedAt) : '—'}`
+      : '—',
   ]);
   return [headers, ...rows];
+}
+
+function StaffAndDateCell({
+  staffField,
+  dateIso,
+}: {
+  staffField: Complaint['createdBy'] | Complaint['updatedBy'] | Complaint['closedBy'];
+  dateIso?: string | null;
+}) {
+  return (
+    <div className="min-w-0 max-w-48 text-sm">
+      <p className="truncate font-medium text-slate-800" title={staffName(staffField)}>
+        {staffName(staffField)}
+      </p>
+      <p className="text-xs text-slate-500">{dateIso ? formatDate(dateIso) : '—'}</p>
+    </div>
+  );
 }
 
 function KanbanCard({
@@ -147,7 +257,15 @@ function KanbanCard({
           {...listeners}
           {...attributes}
         >
+          <TicketIdWithCopy
+            complaint={complaint}
+            textClassName="font-mono text-[11px] font-semibold uppercase tracking-wide text-indigo-600"
+            iconClassName="size-3"
+          />
           <p className="truncate font-medium text-slate-800">{complaint.subject}</p>
+          {complaint.description?.trim() ? (
+            <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500">{complaint.description}</p>
+          ) : null}
           <p className="mt-0.5 text-xs text-slate-500">{userName(complaint)}</p>
           {userPhone(complaint) && (
             <p className="mt-0.5 text-xs text-slate-400">{userPhone(complaint)}</p>
@@ -468,13 +586,52 @@ export function ComplaintManagement() {
   );
 
   const columns = [
-    { key: 'subject', label: 'Subject', render: (c: Complaint) => <span className="font-medium text-slate-800">{c.subject}</span> },
+    {
+      key: 'ticketId',
+      label: 'Ticket ID',
+      render: (c: Complaint) => <TicketIdWithCopy complaint={c} iconClassName="size-4" />,
+    },
+    {
+      key: 'subject',
+      label: 'Subject',
+      render: (c: Complaint) => (
+        <div className="max-w-xs min-w-0">
+          <p className="font-medium text-slate-800">{c.subject}</p>
+          {c.description?.trim() ? (
+            <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500">{c.description}</p>
+          ) : null}
+        </div>
+      ),
+    },
     { key: 'phone', label: 'Phone', render: (c: Complaint) => userPhone(c) ?? '—' },
     { key: 'assignedTo', label: 'Assigned to', render: (c: Complaint) => assignedToName(c) },
     { key: 'status', label: 'Status', render: (c: Complaint) => <StatusBadge status={c.status} /> },
     { key: 'priority', label: 'Priority', render: (c: Complaint) => <PriorityBadge priority={c.priority} /> },
     { key: 'productModel', label: 'Product', render: (c: Complaint) => c.productModel ?? '—' },
-    { key: 'createdAt', label: 'Created', render: (c: Complaint) => formatDate(c.createdAt) },
+    {
+      key: 'created',
+      label: 'Created',
+      render: (c: Complaint) => (
+        <StaffAndDateCell staffField={c.createdBy} dateIso={c.createdAt} />
+      ),
+    },
+    {
+      key: 'updated',
+      label: 'Updated',
+      render: (c: Complaint) => (
+        <StaffAndDateCell staffField={c.updatedBy} dateIso={c.updatedAt} />
+      ),
+    },
+    {
+      key: 'closed',
+      label: 'Closed',
+      render: (c: Complaint) =>
+        c.status === 'closed' ? (
+          <StaffAndDateCell staffField={c.closedBy} dateIso={c.closedAt} />
+        ) : (
+          <span className="text-sm text-slate-400">—</span>
+        ),
+    },
   ];
 
   return (
@@ -524,7 +681,7 @@ export function ComplaintManagement() {
                       setSearchQuery(searchInput);
                     }
                   }}
-                  placeholder="Search subject or description..."
+                  placeholder="Search ticket ID, subject, or description..."
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -549,7 +706,7 @@ export function ComplaintManagement() {
             search={{
               value: searchInput,
               onChange: setSearchInput,
-              placeholder: 'Search subject or description...',
+              placeholder: 'Search ticket ID, subject, or description...',
               onSearchSubmit: () => setSearchQuery(searchInput),
             }}
             filters={filters}
@@ -823,23 +980,27 @@ function ComplaintDetailModal({
   const uploadImagesMutation = useUploadComplaintImages(id);
   const addCommentMutation = useAddComplaintComment(id);
   const [commentText, setCommentText] = useState('');
-  const [isDraggingPhotos, setIsDraggingPhotos] = useState(false);
-  const [pendingImageFiles, setPendingImageFiles] = useState<File[]>([]);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const canUploadImages =
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [pendingAttachmentFiles, setPendingAttachmentFiles] = useState<File[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const canUploadAttachments =
     complaint && (complaint.status === 'in_progress' || complaint.status === 'resolved');
   const images = complaint?.images ?? [];
   const comments = complaint?.comments ?? [];
 
-  const MAX_PENDING_IMAGES = 10;
-  const totalImageSlots = MAX_PENDING_IMAGES - images.length;
+  const MAX_PENDING_ATTACHMENTS = 10;
+  const totalAttachmentSlots = MAX_PENDING_ATTACHMENTS - images.length;
 
   const [pendingPreviewUrls, setPendingPreviewUrls] = useState<string[]>([]);
   useEffect(() => {
-    const urls = pendingImageFiles.map((f) => URL.createObjectURL(f));
+    const urls = pendingAttachmentFiles.map((f) =>
+      fileIsImage(f) ? URL.createObjectURL(f) : ''
+    );
     setPendingPreviewUrls(urls);
-    return () => urls.forEach((u) => URL.revokeObjectURL(u));
-  }, [pendingImageFiles]);
+    return () => urls.forEach((u) => {
+      if (u) URL.revokeObjectURL(u);
+    });
+  }, [pendingAttachmentFiles]);
 
   // Sync form state only when complaint first loads for this id (not on every refetch after save)
   const hasSyncedForComplaintRef = useRef(false);
@@ -858,50 +1019,48 @@ function ComplaintDetailModal({
     hasSyncedForComplaintRef.current = false;
   }, [id]);
 
-  // Clear pending images when opening a different complaint
+  // Clear pending files when opening a different complaint
   useEffect(() => {
-    setPendingImageFiles([]);
+    setPendingAttachmentFiles([]);
   }, [id]);
 
-  const ACCEPT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  function getAcceptedImageFiles(fileList: FileList | null): File[] {
+  function filesFromDataTransfer(fileList: FileList | null): File[] {
     if (!fileList?.length) return [];
-    return Array.from(fileList).filter((f) => ACCEPT_IMAGE_TYPES.includes(f.type));
+    return Array.from(fileList);
   }
 
-  function addPendingImages(newFiles: File[]) {
-    const accepted = newFiles.filter((f) => ACCEPT_IMAGE_TYPES.includes(f.type));
-    setPendingImageFiles((prev) => {
-      const combined = [...prev, ...accepted];
-      return combined.slice(0, Math.max(0, totalImageSlots));
+  function addPendingAttachments(newFiles: File[]) {
+    setPendingAttachmentFiles((prev) => {
+      const combined = [...prev, ...newFiles];
+      return combined.slice(0, Math.max(0, totalAttachmentSlots));
     });
     setEditDirty(true);
   }
 
-  function removePendingImage(index: number) {
-    setPendingImageFiles((prev) => prev.filter((_, i) => i !== index));
+  function removePendingAttachment(index: number) {
+    setPendingAttachmentFiles((prev) => prev.filter((_, i) => i !== index));
     setEditDirty(true);
   }
 
-  function handlePhotosDrop(e: React.DragEvent) {
+  function handleAttachmentsDrop(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
-    setIsDraggingPhotos(false);
-    if (totalImageSlots <= 0) return;
-    const files = getAcceptedImageFiles(e.dataTransfer.files);
-    if (files.length) addPendingImages(files);
+    setIsDraggingFiles(false);
+    if (totalAttachmentSlots <= 0) return;
+    const files = filesFromDataTransfer(e.dataTransfer.files);
+    if (files.length) addPendingAttachments(files);
   }
 
-  function handlePhotosDragOver(e: React.DragEvent) {
+  function handleAttachmentsDragOver(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (e.dataTransfer.types.includes('Files')) setIsDraggingPhotos(true);
+    if (e.dataTransfer.types.includes('Files')) setIsDraggingFiles(true);
   }
 
-  function handlePhotosDragLeave(e: React.DragEvent) {
+  function handleAttachmentsDragLeave(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
-    setIsDraggingPhotos(false);
+    setIsDraggingFiles(false);
   }
 
   function openDelete() {
@@ -928,16 +1087,16 @@ function ComplaintDetailModal({
     if (assignedTo !== currentAssignedId) payload.assignedTo = assignedTo || null;
 
     const hasFieldChanges = Object.keys(payload).length > 0;
-    const hasPendingImages = pendingImageFiles.length > 0;
-    if (!hasFieldChanges && !hasPendingImages) {
+    const hasPendingAttachments = pendingAttachmentFiles.length > 0;
+    if (!hasFieldChanges && !hasPendingAttachments) {
       setEditDirty(false);
       return;
     }
 
     try {
-      if (hasPendingImages) {
-        await uploadImagesMutation.mutateAsync(pendingImageFiles);
-        setPendingImageFiles([]);
+      if (hasPendingAttachments) {
+        await uploadImagesMutation.mutateAsync(pendingAttachmentFiles);
+        setPendingAttachmentFiles([]);
       }
       if (hasFieldChanges) {
         await updateMutation.mutateAsync({ id, payload });
@@ -945,13 +1104,22 @@ function ComplaintDetailModal({
       setEditDirty(false);
       // Allow next refetch to sync form so we show latest server state
       hasSyncedForComplaintRef.current = false;
+      onClose();
     } catch {
       // Errors shown via mutation.isError
     }
   }
 
   return (
-    <Modal title="Complaint details" onClose={onClose}>
+    <Modal
+      title={
+        complaint?.ticketId
+          ? `Complaint details · ${complaint.ticketId}`
+          : 'Complaint details'
+      }
+      onClose={onClose}
+      size="xl"
+    >
       {isLoading ? (
         <p className="py-6 text-center text-slate-500">Loading...</p>
       ) : !complaint ? (
@@ -959,26 +1127,63 @@ function ComplaintDetailModal({
       ) : (
         <div className="flex flex-col gap-4">
           <div>
-            <p className="text-sm font-medium text-slate-500">Subject</p>
-            <p className="text-slate-800">{complaint.subject}</p>
+            <p className="text-sm font-medium text-slate-500">Ticket ID</p>
+            <TicketIdWithCopy
+              complaint={complaint}
+              textClassName="font-mono text-sm font-semibold tracking-wide text-indigo-700"
+              iconClassName="size-4"
+            />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Description</p>
-            <p className="whitespace-pre-wrap text-slate-800">{complaint.description}</p>
+            <p className="text-sm font-medium text-slate-500">Subject</p>
+            <p className="text-base font-semibold text-slate-900">{complaint.subject}</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
+              {complaint.description}
+            </p>
           </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="min-w-0">
               <p className="text-sm font-medium text-slate-500">User</p>
-              <p className="text-slate-800">{userName(complaint)}</p>
-              {userPhone(complaint) && <p className="mt-0.5 text-sm text-slate-600">{userPhone(complaint)}</p>}
+              <p className="wrap-break-word text-slate-800">{userName(complaint)}</p>
+              {linkedUserAccountPhone(complaint) && (
+                <p className="mt-1 text-sm text-slate-600">
+                  <span className="text-slate-500">Account phone: </span>
+                  {linkedUserAccountPhone(complaint)}
+                </p>
+              )}
             </div>
-            <div>
-              <p className="text-sm font-medium text-slate-500">Contact phone</p>
-              <p className="text-slate-800">{complaint.phone || '—'}</p>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-500">Complaint contact phone</p>
+              <p className="break-all text-slate-800">{complaint.phone?.trim() || '—'}</p>
+              <p className="mt-1 text-xs text-slate-500">Number for this complaint (customer / site contact)</p>
             </div>
-            <div>
-              <p className="text-sm font-medium text-slate-500">Created</p>
-              <p className="text-slate-800">{formatDate(complaint.createdAt)}</p>
+          </div>
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+            <p className="mb-3 text-sm font-medium text-slate-600">Audit</p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Created</p>
+                <p className="mt-1 font-medium text-slate-800">{staffName(complaint.createdBy)}</p>
+                <p className="text-sm text-slate-500">{formatDate(complaint.createdAt)}</p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Updated</p>
+                <p className="mt-1 font-medium text-slate-800">{staffName(complaint.updatedBy)}</p>
+                <p className="text-sm text-slate-500">{formatDate(complaint.updatedAt)}</p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Closed</p>
+                {complaint.status === 'closed' ? (
+                  <>
+                    <p className="mt-1 font-medium text-slate-800">{staffName(complaint.closedBy)}</p>
+                    <p className="text-sm text-slate-500">
+                      {complaint.closedAt ? formatDate(complaint.closedAt) : '—'}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-1 text-sm text-slate-400">—</p>
+                )}
+              </div>
             </div>
           </div>
           {(complaint.productModel || complaint.serialNumber || complaint.orderReference) && (
@@ -994,8 +1199,8 @@ function ComplaintDetailModal({
 
           <hr className="border-slate-200" />
           <p className="text-sm font-medium text-slate-700">Update status / priority / assignee / phone</p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="min-w-0">
               <label className="mb-1 block text-sm text-slate-600">Status</label>
               <select
                 value={status || complaint.status}
@@ -1003,7 +1208,7 @@ function ComplaintDetailModal({
                   setStatus(e.target.value as ComplaintStatus);
                   setEditDirty(true);
                 }}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 {STATUS_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -1012,7 +1217,7 @@ function ComplaintDetailModal({
                 ))}
               </select>
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="mb-1 block text-sm text-slate-600">Priority</label>
               <select
                 value={priority || complaint.priority}
@@ -1020,7 +1225,7 @@ function ComplaintDetailModal({
                   setPriority(e.target.value as ComplaintPriority);
                   setEditDirty(true);
                 }}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 {PRIORITY_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -1029,7 +1234,7 @@ function ComplaintDetailModal({
                 ))}
               </select>
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="mb-1 block text-sm text-slate-600">Contact phone</label>
               <input
                 type="tel"
@@ -1039,10 +1244,10 @@ function ComplaintDetailModal({
                   setEditDirty(true);
                 }}
                 placeholder="+91 98765 43210"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="mb-1 block text-sm text-slate-600">Assigned to</label>
               <select
                 value={assignedTo}
@@ -1050,7 +1255,7 @@ function ComplaintDetailModal({
                   setAssignedTo(e.target.value);
                   setEditDirty(true);
                 }}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="">Unassigned</option>
                 {detailUsers.map((u) => (
@@ -1115,48 +1320,70 @@ function ComplaintDetailModal({
             )}
           </div>
 
-          {canUploadImages && (
+          {canUploadAttachments && (
             <div
               className={`rounded-lg border-2 border-dashed p-4 transition-colors ${
-                isDraggingPhotos
+                isDraggingFiles
                   ? 'border-indigo-400 bg-indigo-50/80'
                   : 'border-slate-200 bg-slate-50/50'
               }`}
-              onDragOver={handlePhotosDragOver}
-              onDragLeave={handlePhotosDragLeave}
-              onDrop={handlePhotosDrop}
+              onDragOver={handleAttachmentsDragOver}
+              onDragLeave={handleAttachmentsDragLeave}
+              onDrop={handleAttachmentsDrop}
             >
               <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-slate-700">
-                <FiImage className="size-4" aria-hidden />
-                Photos
+                <FiUpload className="size-4" aria-hidden />
+                Attachments
               </p>
-              {(images.length > 0 || pendingPreviewUrls.length > 0) && (
-                <div className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {images.map((url, i) => (
-                    <a
-                      key={`saved-${i}`}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:shadow"
-                    >
-                      <img
-                        src={url}
-                        alt={`Attachment ${i + 1}`}
-                        className="h-20 w-full object-cover"
-                      />
-                    </a>
-                  ))}
-                  {pendingPreviewUrls.map((url, i) => (
+              {(images.length > 0 || pendingAttachmentFiles.length > 0) && (
+                <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {images.map((url, i) =>
+                    urlLooksLikeImage(url) ? (
+                      <a
+                        key={`saved-${i}`}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:shadow"
+                      >
+                        <img
+                          src={url}
+                          alt={`Attachment ${i + 1}`}
+                          className="h-20 w-full object-cover"
+                        />
+                      </a>
+                    ) : (
+                      <a
+                        key={`saved-${i}`}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex h-20 flex-col items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white p-2 text-center text-xs text-indigo-600 shadow-sm transition hover:bg-slate-50 hover:shadow"
+                      >
+                        <FiFile className="size-6 shrink-0 text-slate-500" aria-hidden />
+                        <span className="line-clamp-2 break-all">Open file</span>
+                      </a>
+                    )
+                  )}
+                  {pendingAttachmentFiles.map((file, i) => (
                     <div key={`pending-${i}`} className="relative">
-                      <img
-                        src={url}
-                        alt={`New ${i + 1}`}
-                        className="h-20 w-full rounded-lg border border-amber-200 bg-white object-cover"
-                      />
+                      {fileIsImage(file) && pendingPreviewUrls[i] ? (
+                        <img
+                          src={pendingPreviewUrls[i]}
+                          alt={file.name}
+                          className="h-20 w-full rounded-lg border border-amber-200 bg-white object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-20 flex-col items-center justify-center gap-1 rounded-lg border border-amber-200 bg-amber-50/50 p-2 text-center">
+                          <FiFile className="size-6 text-amber-800/80" aria-hidden />
+                          <span className="line-clamp-2 w-full break-all text-[10px] text-slate-700">
+                            {file.name}
+                          </span>
+                        </div>
+                      )}
                       <button
                         type="button"
-                        onClick={() => removePendingImage(i)}
+                        onClick={() => removePendingAttachment(i)}
                         className="absolute right-1 top-1 rounded bg-slate-800/70 px-1.5 py-0.5 text-xs text-white hover:bg-slate-800"
                         aria-label="Remove"
                       >
@@ -1168,15 +1395,14 @@ function ComplaintDetailModal({
               )}
               <div className="flex flex-wrap items-center gap-2">
                 <input
-                  ref={imageInputRef}
+                  ref={attachmentInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
                   multiple
                   className="hidden"
                   onChange={(e) => {
-                    const files = getAcceptedImageFiles(e.target.files);
-                    if (files.length && totalImageSlots > 0) {
-                      addPendingImages(files);
+                    const files = filesFromDataTransfer(e.target.files);
+                    if (files.length && totalAttachmentSlots > 0) {
+                      addPendingAttachments(files);
                       e.target.value = '';
                     }
                   }}
@@ -1184,16 +1410,16 @@ function ComplaintDetailModal({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => imageInputRef.current?.click()}
-                  disabled={totalImageSlots <= 0}
+                  onClick={() => attachmentInputRef.current?.click()}
+                  disabled={totalAttachmentSlots <= 0}
                 >
                   <FiUpload className="mr-1.5 inline-block size-4" aria-hidden />
-                  Select multiple photos
+                  Select files
                 </Button>
                 <span className="text-xs text-slate-500">
-                  {isDraggingPhotos
-                    ? 'Drop images here (multiple allowed)'
-                    : 'Photos are saved when you click Save changes below. JPEG, PNG, GIF or WebP. Max 5MB each, up to 10 total.'}
+                  {isDraggingFiles
+                    ? 'Drop files here (multiple allowed)'
+                    : 'Saved when you click Save changes. Most file types (PDF, Office, images, ZIP, etc.). Executables blocked. Max 15MB each, up to 10 total.'}
                 </span>
               </div>
               {uploadImagesMutation.isError && (
@@ -1305,16 +1531,16 @@ function MessageModal({
             <p className="text-sm text-red-600">{(sendMutation.error as Error).message}</p>
           )}
           <div className="flex gap-2">
-            <input
-              type="text"
+            <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
               placeholder="Type a message…"
-              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              rows={3}
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               disabled={sendMutation.isPending}
             />
-            <Button onClick={handleSend} loading={sendMutation.isPending} disabled={!body.trim()}>
+            <Button onClick={handleSend} loading={sendMutation.isPending} disabled={!body.trim()} className="self-end">
               Send
             </Button>
           </div>
@@ -1339,7 +1565,14 @@ function ConfirmDeleteModal({
   return (
     <Modal title="Delete complaint" onClose={onClose}>
       <p className="text-slate-600">
-        Are you sure you want to delete &quot;{complaint.subject}&quot;? This cannot be undone.
+        Are you sure you want to delete complaint{' '}
+        <TicketIdWithCopy
+          complaint={complaint}
+          textClassName="font-mono text-sm font-semibold text-indigo-700"
+          iconClassName="size-3.5"
+        />
+        {' — '}
+        &quot;{complaint.subject}&quot;? This cannot be undone.
       </p>
       <div className="flex justify-end gap-2 pt-4">
         <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
@@ -1363,11 +1596,16 @@ function Modal({
   title,
   onClose,
   children,
+  size = 'default',
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  /** Wider modals for dense forms (e.g. complaint details). */
+  size?: 'default' | 'lg' | 'xl';
 }) {
+  const maxWidth =
+    size === 'xl' ? 'max-w-4xl' : size === 'lg' ? 'max-w-3xl' : 'max-w-lg';
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
@@ -1377,7 +1615,7 @@ function Modal({
       aria-labelledby="modal-title"
     >
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+        className={`max-h-[90vh] w-full ${maxWidth} overflow-y-auto rounded-xl bg-white p-6 shadow-xl sm:p-8`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">

@@ -18,6 +18,15 @@ export interface LoginCredentials {
   password: string;
 }
 
+export interface RequestOtpPayload {
+  phone: string;
+}
+
+export interface LoginWithOtpPayload {
+  phone: string;
+  otp: string;
+}
+
 export interface SignUpCredentials {
   fullName: string;
   email: string;

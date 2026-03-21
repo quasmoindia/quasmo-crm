@@ -9,6 +9,7 @@ import { UserManagement } from './pages/UserManagement';
 import { RoleManagement } from './pages/RoleManagement';
 import { ComplaintManagement } from './pages/ComplaintManagement';
 import { LeadManagement } from './pages/LeadManagement';
+import { TaxInvoiceManagement } from './pages/TaxInvoiceManagement';
 // import { PlaceholderModule } from './pages/PlaceholderModule'; // used by sales/finance/content routes when enabled
 
 const queryClient = new QueryClient({
@@ -39,6 +40,7 @@ function App() {
             <Route path="roles" element={<RoleManagement />} />
             <Route path="complaints" element={<ComplaintManagement />} />
             <Route path="leads" element={<LeadManagement />} />
+            <Route path="invoices" element={<TaxInvoiceManagement />} />
             {/* Sales / Finance / Content – commented for now
             <Route path="sales" element={<PlaceholderModule title="Sales management" />} />
             <Route path="finance" element={<PlaceholderModule title="Finance management" />} />
