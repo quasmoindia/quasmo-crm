@@ -21,7 +21,7 @@ export interface UploadComplaintImagesResult {
 
 export const complaintsQueryKey = ['complaints'];
 
-function complaintsListKey(filters: {
+export function complaintsListKey(filters: {
   status?: ComplaintStatus;
   priority?: ComplaintPriority;
   assignedTo?: string;
@@ -103,19 +103,23 @@ export async function uploadComplaintImagesApi(
   return data as UploadComplaintImagesResult;
 }
 
-export function useComplaintsList(params: {
-  status?: ComplaintStatus;
-  priority?: ComplaintPriority;
-  assignedTo?: string;
-  search?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  page?: number;
-  limit?: number;
-}) {
+export function useComplaintsList(
+  params: {
+    status?: ComplaintStatus;
+    priority?: ComplaintPriority;
+    assignedTo?: string;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  },
+  options?: { enabled?: boolean }
+) {
   return useQuery({
     queryKey: complaintsListKey(params),
     queryFn: () => listComplaintsApi(params),
+    enabled: options?.enabled ?? true,
   });
 }
 

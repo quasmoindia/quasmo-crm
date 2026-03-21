@@ -17,6 +17,8 @@ export interface ComplaintComment {
 
 export interface Complaint {
   _id: string;
+  /** Human-readable ticket id, e.g. QUASMO-CMP-000042 */
+  ticketId?: string;
   user: ComplaintUser | string;
   /** User assigned to handle this complaint */
   assignedTo?: ComplaintUser | string | null;

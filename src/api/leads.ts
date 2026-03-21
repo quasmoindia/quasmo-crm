@@ -6,6 +6,7 @@ import type {
   LeadsListResponse,
   CreateLeadPayload,
   UpdateLeadPayload,
+  AddLeadDocumentPayload,
   LeadStatus,
 } from '../types/lead';
 
@@ -17,9 +18,22 @@ export interface BulkUploadResult {
   errors: { row: number; message: string }[];
 }
 
+export interface UploadLeadAttachmentsResult {
+  uploaded: number;
+  failed: number;
+  urls: string[];
+  errors: string[];
+}
+
 export const leadsQueryKey = ['leads'];
 
-function leadsListKey(params: { status?: LeadStatus; assignedTo?: string; search?: string; page?: number; limit?: number }) {
+export function leadsListKey(params: {
+  status?: LeadStatus;
+  assignedTo?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) {
   return [...leadsQueryKey, 'list', params] as const;
 }
 
@@ -48,6 +62,24 @@ export function listAssignableUsersApi() {
   return get<{ data: { _id: string; fullName: string; email?: string }[] }>(`${LEADS_BASE}/users`);
 }
 
+/** Response from GET /leads/gst-lookup (optional; requires server GSTIN_CHECK_API_KEY). */
+export type GstinLookupResponse = {
+  configured: boolean;
+  gstin: string;
+  legalName?: string;
+  tradeName?: string;
+  company?: string;
+  address?: string;
+  status?: string;
+  warning?: string;
+};
+
+export function lookupGstinApi(gstin: string) {
+  const q = new URLSearchParams();
+  q.set('gstin', gstin.trim());
+  return get<GstinLookupResponse>(`${LEADS_BASE}/gst-lookup?${q.toString()}`);
+}
+
 export function createLeadApi(payload: CreateLeadPayload) {
   return post<Lead>(LEADS_BASE, payload);
 }
@@ -56,8 +88,32 @@ export function updateLeadApi(id: string, payload: UpdateLeadPayload) {
   return patch<Lead>(`${LEADS_BASE}/${id}`, payload);
 }
 
+export function addLeadDocumentApi(id: string, payload: AddLeadDocumentPayload) {
+  return post<Lead>(`${LEADS_BASE}/${id}/documents`, payload);
+}
+
 export function deleteLeadApi(id: string) {
   return del<unknown>(`${LEADS_BASE}/${id}`);
+}
+
+export async function uploadLeadAttachmentsApi(
+  id: string,
+  files: File[]
+): Promise<UploadLeadAttachmentsResult> {
+  const token = localStorage.getItem('token');
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const path = `${LEADS_BASE.replace(/^\//, '')}/${id}/attachments`;
+  const url = `${base}/${path}`;
+  const form = new FormData();
+  files.forEach((f) => form.append('files', f));
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { message?: string }).message ?? 'Upload failed');
+  return data as UploadLeadAttachmentsResult;
 }
 
 export async function bulkUploadLeadsApi(file: File): Promise<BulkUploadResult> {
@@ -105,16 +161,20 @@ export async function exportLeadsApi(
   return { blob, filename };
 }
 
-export function useLeadsList(params: {
-  status?: LeadStatus;
-  assignedTo?: string;
-  search?: string;
-  page?: number;
-  limit?: number;
-}) {
+export function useLeadsList(
+  params: {
+    status?: LeadStatus;
+    assignedTo?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  },
+  options?: { enabled?: boolean }
+) {
   return useQuery({
     queryKey: leadsListKey(params),
     queryFn: () => listLeadsApi(params),
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -150,6 +210,17 @@ export function useUpdateLead() {
   });
 }
 
+export function useAddLeadDocument(leadId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AddLeadDocumentPayload) => addLeadDocumentApi(leadId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leadsQueryKey });
+      queryClient.invalidateQueries({ queryKey: [...leadsQueryKey, leadId] });
+    },
+  });
+}
+
 export function useDeleteLead() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -163,5 +234,16 @@ export function useBulkUploadLeads() {
   return useMutation({
     mutationFn: bulkUploadLeadsApi,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: leadsQueryKey }),
+  });
+}
+
+export function useUploadLeadAttachments(leadId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (files: File[]) => uploadLeadAttachmentsApi(leadId, files),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leadsQueryKey });
+      queryClient.invalidateQueries({ queryKey: [...leadsQueryKey, leadId] });
+    },
   });
 }

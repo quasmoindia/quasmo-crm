@@ -3,7 +3,7 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
-import { useUsersList, useCreateUser, useUpdateUser } from '../api/users';
+import { useUsersList, useCreateUser, useUpdateUser, useDeleteUser } from '../api/users';
 import { useRolesConfig } from '../api/config';
 import type { UserRecord, RoleOption } from '../types/user';
 import { getRoleLabel } from '../config/roles';
@@ -58,6 +58,7 @@ export function UserManagement() {
   const roleLabels = useRoleLabels();
   const createMutation = useCreateUser();
   const updateMutation = useUpdateUser();
+  const deleteMutation = useDeleteUser();
 
   const users = data?.data ?? [];
 
@@ -71,9 +72,22 @@ export function UserManagement() {
       key: 'actions',
       label: '',
       render: (u: UserRecord) => (
-        <Button variant="outline" onClick={() => setEditingUser(u)}>
-          Edit
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setEditingUser(u)}>
+            Edit
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (window.confirm(`Delete user "${u.fullName}" (${u.email})? This cannot be undone.`)) {
+                deleteMutation.mutate(u._id);
+              }
+            }}
+            disabled={deleteMutation.isPending}
+          >
+            Delete
+          </Button>
+        </div>
       ),
     },
   ];

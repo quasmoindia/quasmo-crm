@@ -6,7 +6,7 @@
 /** Role id -> module ids ('*' = all modules) */
 export const ROLE_MODULE_MAP: Record<string, readonly string[]> = {
   admin: ['*'],
-  user: ['dashboard', 'complaints', 'leads'],
+  user: ['dashboard', 'complaints', 'leads', 'invoices'],
   viewer: ['dashboard'],
   // content_writer: ['dashboard', 'content'],
   // sales_manager: ['dashboard', 'sales', 'leads'],
@@ -37,6 +37,7 @@ export const NAV_MODULES: NavModule[] = [
   { moduleId: 'roles', label: 'Role management', path: '/dashboard/roles', end: false },
   { moduleId: 'complaints', label: 'Complaint management', path: '/dashboard/complaints', end: false },
   { moduleId: 'leads', label: 'Lead management', path: '/dashboard/leads', end: false },
+  { moduleId: 'invoices', label: 'Tax invoices', path: '/dashboard/invoices', end: false },
   // Sales / Finance / Content – commented for now
   // { moduleId: 'sales', label: 'Sales management', path: '/dashboard/sales', end: false },
   // { moduleId: 'finance', label: 'Finance management', path: '/dashboard/finance', end: false },
