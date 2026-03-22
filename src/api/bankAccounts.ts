@@ -1,8 +1,27 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { get, post, patch, del } from '../utils/api';
+import { API_BASE_URL } from '../utils/constants';
 import type { BankAccount, BankAccountsListResponse } from '../types/bankAccount';
 
 const BASE = '/bank-accounts';
+
+/** Upload QR image (ImageKit); use returned URL as `qrUrl` or `bankQrUrl`. */
+export async function uploadBankQrImageApi(file: File): Promise<{ url: string }> {
+  const token = localStorage.getItem('token');
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const path = `${BASE.replace(/^\//, '')}/upload-qr-image`;
+  const url = `${base}/${path}`;
+  const form = new FormData();
+  form.append('qr', file);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { message?: string }).message ?? 'QR upload failed');
+  return data as { url: string };
+}
 
 export const bankAccountsQueryKey = ['bankAccounts'];
 
@@ -17,6 +36,8 @@ export function createBankAccountApi(body: {
   accountNo: string;
   ifsc: string;
   branch?: string;
+  upiId?: string;
+  qrUrl?: string;
   sortOrder?: number;
   isActive?: boolean;
 }) {
@@ -31,6 +52,8 @@ export function updateBankAccountApi(
     accountNo: string;
     ifsc: string;
     branch: string;
+    upiId: string;
+    qrUrl: string;
     sortOrder: number;
     isActive: boolean;
   }>

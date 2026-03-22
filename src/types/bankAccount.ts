@@ -5,6 +5,8 @@ export interface BankAccount {
   accountNo: string;
   ifsc: string;
   branch: string;
+  upiId?: string;
+  qrUrl?: string;
   isActive: boolean;
   sortOrder: number;
   createdAt?: string;

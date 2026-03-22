@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { get, post, patch } from '../utils/api';
+import { get, post, patch, del } from '../utils/api';
 
 export interface RoleRecord {
   _id: string;
@@ -41,6 +41,10 @@ export function updateRoleApi(id: string, payload: UpdateRolePayload) {
   return patch<RoleRecord>(`${ROLES_BASE}/${id}`, payload);
 }
 
+export function deleteRoleApi(id: string) {
+  return del<{ message: string }>(`${ROLES_BASE}/${id}`);
+}
+
 export function useRolesList() {
   return useQuery({
     queryKey: rolesQueryKey,
@@ -64,6 +68,17 @@ export function useUpdateRole() {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateRolePayload }) =>
       updateRoleApi(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: rolesQueryKey });
+      queryClient.invalidateQueries({ queryKey: ['config', 'roles'] });
+    },
+  });
+}
+
+export function useDeleteRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteRoleApi,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: rolesQueryKey });
       queryClient.invalidateQueries({ queryKey: ['config', 'roles'] });

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { get, post, patch, del } from '../utils/api';
 import { API_BASE_URL } from '../utils/constants';
-import type { TaxInvoice, TaxInvoicesListResponse } from '../types/taxInvoice';
+import type { TaxInvoice, TaxInvoicesListResponse, TaxInvoiceLineItemSuggestion } from '../types/taxInvoice';
 
 const BASE = '/invoices';
 
@@ -32,6 +32,24 @@ export function listTaxInvoicesApi(params: {
 
 export function getTaxInvoiceApi(id: string) {
   return get<TaxInvoice>(`${BASE}/${id}`);
+}
+
+/** Preview next auto document number for a kind (create flow). */
+export function getNextDocumentNumberApi(documentKind: string) {
+  const sp = new URLSearchParams();
+  sp.set('documentKind', documentKind);
+  return get<{ documentKind: string; nextNumber: string }>(`${BASE}/next-number?${sp.toString()}`);
+}
+
+/** Distinct line items from saved invoices (newest usage first). Optional `q` filters description. */
+export function listLineItemSuggestionsApi(params?: { q?: string; limit?: number }) {
+  const sp = new URLSearchParams();
+  if (params?.q?.trim()) sp.set('q', params.q.trim());
+  if (params?.limit != null) sp.set('limit', String(params.limit));
+  const q = sp.toString();
+  return get<{ data: TaxInvoiceLineItemSuggestion[] }>(
+    q ? `${BASE}/line-item-suggestions?${q}` : `${BASE}/line-item-suggestions`
+  );
 }
 
 export function getTaxInvoicePreviewApi(id: string) {

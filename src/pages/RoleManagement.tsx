@@ -3,17 +3,24 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
-import { useRolesList, useCreateRole, useUpdateRole } from '../api/roles';
+import { useRolesList, useCreateRole, useUpdateRole, useDeleteRole } from '../api/roles';
 import { useRolesConfig } from '../api/config';
+import { useCurrentUser } from '../api/auth';
 import type { RoleRecord } from '../api/roles';
 
 export function RoleManagement() {
+  const { data: auth } = useCurrentUser();
+  const isAdmin = auth?.user?.role === 'admin';
+
   const [createOpen, setCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<RoleRecord | null>(null);
+
   const { data, isLoading, isError, error } = useRolesList();
   const { data: configData } = useRolesConfig();
   const createMutation = useCreateRole();
   const updateMutation = useUpdateRole();
+  const deleteMutation = useDeleteRole();
 
   const roles = data?.data ?? [];
   const modulesFromConfig = configData?.modules;
@@ -26,9 +33,20 @@ export function RoleManagement() {
       key: 'actions',
       label: '',
       render: (r: RoleRecord) => (
-        <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => setEditingRole(r)}>
-          Edit
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => setEditingRole(r)}>
+            Edit
+          </Button>
+          {isAdmin && r.name !== 'admin' && (
+            <Button
+              variant="outline"
+              className="border-red-200 px-3 py-1.5 text-xs text-red-700 hover:bg-red-50"
+              onClick={() => setDeleteTarget(r)}
+            >
+              Delete
+            </Button>
+          )}
+        </div>
       ),
     },
   ];
@@ -36,7 +54,14 @@ export function RoleManagement() {
   return (
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Role management</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Role management</h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-600">
+            Define module access for each role. Only <strong className="font-medium text-slate-800">admins</strong> can delete
+            a role (not allowed if users are still assigned, and the <code className="rounded bg-slate-100 px-1">admin</code>{' '}
+            role is protected).
+          </p>
+        </div>
         <Button onClick={() => setCreateOpen(true)}>Create role</Button>
       </div>
 
@@ -71,6 +96,49 @@ export function RoleManagement() {
           mutation={updateMutation}
           modulesFromConfig={modulesFromConfig}
         />
+      )}
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => !deleteMutation.isPending && setDeleteTarget(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-role-title"
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="delete-role-title" className="text-lg font-semibold text-slate-800">
+              Delete role?
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Remove <strong className="text-slate-800">{deleteTarget.label}</strong> ({deleteTarget.name}). This cannot be
+              undone. Users must not be assigned this role.
+            </p>
+            {deleteMutation.isError && (
+              <p className="mt-3 text-sm text-red-600">{(deleteMutation.error as Error).message}</p>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleteMutation.isPending}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-red-600 hover:bg-red-700"
+                loading={deleteMutation.isPending}
+                onClick={() => {
+                  deleteMutation.mutate(deleteTarget._id, {
+                    onSuccess: () => setDeleteTarget(null),
+                  });
+                }}
+              >
+                Delete role
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

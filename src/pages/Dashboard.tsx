@@ -1,4 +1,4 @@
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useCurrentUser } from '../api/auth';
 import {
@@ -7,6 +7,7 @@ import {
   useComplaintsList,
 } from '../api/complaints';
 import { listLeadsApi, leadsListKey, useLeadsList } from '../api/leads';
+import { listTaxInvoicesApi, taxInvoicesListKey } from '../api/taxInvoices';
 import { useUsersList } from '../api/users';
 import { Card } from '../components/Card';
 import { canAccessModule } from '../config/roles';
@@ -59,10 +60,19 @@ export function Dashboard() {
   const canComplaints = canAccessModule(role, 'complaints', roleModules);
   const canLeads = canAccessModule(role, 'leads', roleModules);
   const canUsers = canAccessModule(role, 'users', roleModules);
+  const canInvoices = canAccessModule(role, 'invoices', roleModules);
+  const canRoles = canAccessModule(role, 'roles', roleModules);
 
   const complaintsRecent = useComplaintsList({ page: 1, limit: 5 }, { enabled: canComplaints });
   const leadsRecent = useLeadsList({ page: 1, limit: 5 }, { enabled: canLeads });
   const usersList = useUsersList({ enabled: canUsers });
+
+  const invoicesCountQuery = useQuery({
+    queryKey: taxInvoicesListKey({ page: 1, limit: 1 }),
+    queryFn: () => listTaxInvoicesApi({ page: 1, limit: 1 }),
+    enabled: canInvoices,
+    staleTime: 30_000,
+  });
 
   const complaintStatusQueries = useQueries({
     queries: COMPLAINT_STATUSES.map((status) => ({
@@ -91,10 +101,15 @@ export function Dashboard() {
   const complaintsLoading =
     canComplaints && (complaintsRecent.isLoading || complaintStatusQueries.some((q) => q.isLoading));
   const leadsLoading = canLeads && (leadsRecent.isLoading || leadStatusQueries.some((q) => q.isLoading));
+  const invoicesLoading = canInvoices && invoicesCountQuery.isLoading;
 
   const recentComplaints: Complaint[] = complaintsRecent.data?.data ?? [];
   const recentLeads: Lead[] = leadsRecent.data?.data ?? [];
   const userCount = usersList.data?.data?.length ?? 0;
+  const invoicesTotal = invoicesCountQuery.data?.pagination?.total ?? 0;
+
+  const hasAnyModule =
+    canComplaints || canLeads || canUsers || canInvoices || canRoles;
 
   return (
     <div className="space-y-8">
@@ -106,7 +121,7 @@ export function Dashboard() {
           ) : user?.fullName ? (
             <>
               Welcome back, <span className="font-medium text-slate-800">{user.fullName}</span>.
-              Here’s a snapshot of Quasmo CRM.
+              Here’s a snapshot of complaints, leads, invoices, and team activity.
             </>
           ) : (
             'Welcome to Quasmo CRM. Here’s a snapshot of your workspace.'
@@ -114,8 +129,8 @@ export function Dashboard() {
         </p>
       </div>
 
-      {(canComplaints || canLeads || canUsers) && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {hasAnyModule && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {canComplaints && (
             <StatTile
               label="Total complaints"
@@ -140,9 +155,17 @@ export function Dashboard() {
               accent="border-l-4 border-l-emerald-500"
             />
           )}
-          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4 sm:col-span-2 lg:col-span-1">
+          {canInvoices && (
+            <StatTile
+              label="Tax documents"
+              value={invoicesLoading ? '…' : invoicesTotal}
+              sub="Invoices, proformas & quotes"
+              accent="border-l-4 border-l-violet-500"
+            />
+          )}
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4 sm:col-span-2 xl:col-span-2">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Quick links</p>
-            <ul className="mt-2 flex flex-col gap-1.5 text-sm">
+            <ul className="mt-2 grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
               {canComplaints && (
                 <li>
                   <Link className="text-indigo-600 hover:text-indigo-800 hover:underline" to="/dashboard/complaints">
@@ -157,10 +180,24 @@ export function Dashboard() {
                   </Link>
                 </li>
               )}
+              {canInvoices && (
+                <li>
+                  <Link className="text-indigo-600 hover:text-indigo-800 hover:underline" to="/dashboard/invoices">
+                    Tax invoices →
+                  </Link>
+                </li>
+              )}
               {canUsers && (
                 <li>
                   <Link className="text-indigo-600 hover:text-indigo-800 hover:underline" to="/dashboard/users">
                     User management →
+                  </Link>
+                </li>
+              )}
+              {canRoles && (
+                <li>
+                  <Link className="text-indigo-600 hover:text-indigo-800 hover:underline" to="/dashboard/roles">
+                    Role management →
                   </Link>
                 </li>
               )}
@@ -169,11 +206,11 @@ export function Dashboard() {
         </div>
       )}
 
-      {!canComplaints && !canLeads && !canUsers && (
+      {!hasAnyModule && (
         <Card>
           <p className="text-slate-600">
-            Your role can access this dashboard only. Ask an administrator if you need Complaints, Leads, or User
-            management.
+            Your role can access this dashboard only. Ask an administrator if you need access to complaints, leads, tax
+            invoices, users, or roles.
           </p>
         </Card>
       )}

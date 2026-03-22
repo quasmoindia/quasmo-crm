@@ -4,8 +4,6 @@ export type LeadStatus =
   | 'contacted'
   | 'qualified'
   | 'proposal'
-  | 'quotation_sent'
-  | 'negotiation'
   | 'invoice_sent'
   | 'closed'
   | 'lost';
@@ -102,8 +100,6 @@ export const LEAD_STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: 'contacted', label: 'Contacted' },
   { value: 'qualified', label: 'Qualified' },
   { value: 'proposal', label: 'Proposal' },
-  { value: 'quotation_sent', label: 'Quotation sent' },
-  { value: 'negotiation', label: 'Negotiation' },
   { value: 'invoice_sent', label: 'Invoice sent' },
   { value: 'closed', label: 'Closed (won)' },
   { value: 'lost', label: 'Lost' },
@@ -115,8 +111,6 @@ export const LEAD_STATUS_STYLES: Record<LeadStatus, string> = {
   contacted: 'bg-blue-100 text-blue-800',
   qualified: 'bg-cyan-100 text-cyan-800',
   proposal: 'bg-amber-100 text-amber-800',
-  quotation_sent: 'bg-violet-100 text-violet-800',
-  negotiation: 'bg-orange-100 text-orange-800',
   invoice_sent: 'bg-teal-100 text-teal-800',
   closed: 'bg-emerald-100 text-emerald-800',
   lost: 'bg-slate-200 text-slate-700',

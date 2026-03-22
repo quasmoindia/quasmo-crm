@@ -9,6 +9,15 @@ export interface TaxInvoiceLineItem {
   amount?: number;
 }
 
+/** Row from GET /invoices/line-item-suggestions (past invoice lines for autocomplete). */
+export interface TaxInvoiceLineItemSuggestion {
+  description: string;
+  hsnSac: string;
+  unit: string;
+  price: number;
+  lastUsed?: string;
+}
+
 export interface TaxInvoiceUserRef {
   _id: string;
   fullName: string;
@@ -31,6 +40,7 @@ export interface TaxInvoice {
 
   documentKind?: TaxDocumentKind;
   bankAccountId?: string | { _id: string; label?: string } | null;
+  signaturePresetId?: string | { _id: string; label?: string } | null;
 
   sellerGstin: string;
   sellerName: string;
@@ -43,11 +53,12 @@ export interface TaxInvoice {
   invoiceNo: string;
   invoiceDate: string;
   placeOfSupply: string;
-  reverseCharge: string;
+  /** Legacy; no longer on form/PDF */
+  reverseCharge?: string;
   transport: string;
 
   vehicleNo: string;
-  station: string;
+  paymentTerms?: string;
   ewayBillNo: string;
   dateOfRemoval: string;
   freight: string;
@@ -62,6 +73,7 @@ export interface TaxInvoice {
   shippedToGstin: string;
 
   contractNo: string;
+  remarks?: string;
 
   items: TaxInvoiceLineItem[];
 
@@ -75,6 +87,8 @@ export interface TaxInvoice {
   bankAccountNo: string;
   bankIfsc: string;
   bankBranch: string;
+  bankUpiId?: string;
+  bankQrUrl?: string;
 
   termsAndConditions: string;
 
