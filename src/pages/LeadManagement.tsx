@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { Link } from 'react-router-dom';
-import { FiList, FiGrid, FiUpload, FiDownload, FiFile, FiMessageCircle, FiEye, FiSearch } from 'react-icons/fi';
+import { FiList, FiGrid, FiUpload, FiDownload, FiFile, FiMessageCircle, FiEye } from 'react-icons/fi';
 import {
   DndContext,
   type DragEndEvent,
@@ -12,6 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { Button } from '../components/Button';
+import { GstinLookupButton, type GstinLookupResponse } from '../components/GstinLookupButton';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
@@ -24,10 +25,7 @@ import {
   useAssignableUsers,
   useBulkUploadLeads,
   useUploadLeadAttachments,
-  useAddLeadDocument,
   exportLeadsApi,
-  lookupGstinApi,
-  type GstinLookupResponse,
 } from '../api/leads';
 import { useSendMessageToPhone } from '../api/messages';
 import { useCurrentUser } from '../api/auth';
@@ -36,8 +34,8 @@ import {
   getTaxInvoicePreviewApi,
   downloadTaxInvoicePdfApi,
 } from '../api/taxInvoices';
-import type { Lead, LeadStatus, LeadSource, CreateLeadPayload, LeadDocumentSent, LeadDocumentSentType } from '../types/lead';
-import { LEAD_STATUS_OPTIONS, LEAD_SOURCE_OPTIONS, LEAD_STATUS_STYLES, LEAD_DOCUMENT_TYPE_OPTIONS } from '../types/lead';
+import type { Lead, LeadStatus, LeadSource, CreateLeadPayload } from '../types/lead';
+import { LEAD_STATUS_OPTIONS, LEAD_SOURCE_OPTIONS, LEAD_STATUS_STYLES } from '../types/lead';
 import type { TaxInvoice } from '../types/taxInvoice';
 import { DOCUMENT_KIND_OPTIONS } from '../types/taxDocumentKind';
 
@@ -104,52 +102,6 @@ function LeadBusinessCell({ lead }: { lead: Lead }) {
       {name ? <p className="font-medium text-slate-800">{name}</p> : null}
       {addr ? <p className="whitespace-pre-wrap text-xs leading-snug text-slate-600">{addr}</p> : null}
       {gst ? <p className="font-mono text-xs text-slate-500">GST: {gst}</p> : null}
-    </div>
-  );
-}
-
-function GstinLookupButton({
-  gstin,
-  disabled,
-  onSuccess,
-  fullWidthOnMobile,
-}: {
-  gstin: string;
-  disabled?: boolean;
-  onSuccess: (d: GstinLookupResponse) => void;
-  /** Stack full width on small screens (e.g. beside GST in a row on `sm+`) */
-  fullWidthOnMobile?: boolean;
-}) {
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  return (
-    <div className={`flex min-h-[42px] flex-col justify-end gap-1.5 ${fullWidthOnMobile ? 'w-full sm:w-auto' : ''}`}>
-      <Button
-        type="button"
-        variant="outline"
-        className={`inline-flex items-center justify-center gap-1.5 border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/50 ${fullWidthOnMobile ? 'w-full sm:w-auto' : ''}`}
-        disabled={disabled || loading}
-        onClick={() => {
-          void (async () => {
-            setErr(null);
-            setLoading(true);
-            try {
-              const data = await lookupGstinApi(gstin);
-              onSuccess(data);
-            } catch (e) {
-              setErr((e as Error).message);
-            } finally {
-              setLoading(false);
-            }
-          })();
-        }}
-      >
-        <FiSearch className="size-4 shrink-0 text-indigo-600" aria-hidden />
-        <span className="hidden sm:inline">{loading ? 'Looking up…' : 'Look up from GSTIN'}</span>
-        <span className="sm:hidden">{loading ? '…' : 'GST look up'}</span>
-      </Button>
-      {err && <p className="text-xs leading-snug text-red-600">{err}</p>}
     </div>
   );
 }
@@ -251,7 +203,7 @@ function LeadLinkedInvoicesSection({ leadId }: { leadId: string }) {
       <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-slate-800">Tax invoices &amp; quotes (this lead)</h3>
-          <Link to="/invoices" className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+          <Link to="/dashboard/invoices" className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
             Open invoices page →
           </Link>
         </div>
@@ -411,8 +363,6 @@ const LEAD_COLUMN_COLORS: Record<LeadStatus, string> = {
   contacted: 'bg-blue-50 border-blue-200',
   qualified: 'bg-cyan-50 border-cyan-200',
   proposal: 'bg-amber-50 border-amber-200',
-  quotation_sent: 'bg-violet-50 border-violet-200',
-  negotiation: 'bg-orange-50 border-orange-200',
   invoice_sent: 'bg-teal-50 border-teal-200',
   closed: 'bg-emerald-50 border-emerald-200',
   lost: 'bg-slate-100 border-slate-300',
@@ -1269,137 +1219,6 @@ function BulkUploadModal({
   );
 }
 
-function documentSentByLabel(doc: LeadDocumentSent): string {
-  const sb = doc.sentBy;
-  if (sb && typeof sb === 'object' && 'fullName' in sb && sb.fullName) return sb.fullName;
-  return '—';
-}
-
-function LeadDocumentsLog({ leadId, documents }: { leadId: string; documents: LeadDocumentSent[] | undefined }) {
-  const addMutation = useAddLeadDocument(leadId);
-  const [docType, setDocType] = useState<LeadDocumentSentType>('quotation');
-  const [reference, setReference] = useState('');
-  const [amount, setAmount] = useState('');
-  const [notes, setNotes] = useState('');
-
-  const sorted = [...(documents ?? [])].sort(
-    (a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()
-  );
-
-  function handleLog(e: React.FormEvent) {
-    e.preventDefault();
-    addMutation.mutate(
-      {
-        type: docType,
-        reference: reference.trim() || undefined,
-        amount: amount.trim() || undefined,
-        notes: notes.trim() || undefined,
-      },
-      {
-        onSuccess: () => {
-          setReference('');
-          setAmount('');
-          setNotes('');
-        },
-      }
-    );
-  }
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4">
-      <h3 className="text-sm font-semibold text-slate-800">Quotation &amp; invoice log</h3>
-      <p className="mt-1 text-xs text-slate-500">
-        Record each quotation, invoice, or proforma you send so the team can see the history.
-      </p>
-      <form onSubmit={handleLog} className="mt-3 space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Type</label>
-            <select
-              value={docType}
-              onChange={(e) => setDocType(e.target.value as LeadDocumentSentType)}
-              disabled={addMutation.isPending}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              {LEAD_DOCUMENT_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <Input
-            label="Reference # (optional)"
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            placeholder="QT-2024-001"
-            disabled={addMutation.isPending}
-          />
-          <Input
-            label="Amount (optional)"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="₹ 1,25,000"
-            disabled={addMutation.isPending}
-          />
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-medium text-slate-600">Notes (optional)</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              disabled={addMutation.isPending}
-              rows={2}
-              placeholder="Email sent, revision, etc."
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
-          </div>
-        </div>
-        {addMutation.isError && (
-          <p className="text-sm text-red-600">{(addMutation.error as Error).message}</p>
-        )}
-        <Button type="submit" loading={addMutation.isPending} variant="outline" className="w-full sm:w-auto">
-          Log entry
-        </Button>
-      </form>
-
-      {sorted.length > 0 ? (
-        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table className="w-full min-w-[520px] text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs font-medium uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Type</th>
-                <th className="px-3 py-2">Reference</th>
-                <th className="px-3 py-2">Amount</th>
-                <th className="px-3 py-2">Sent</th>
-                <th className="px-3 py-2">By</th>
-                <th className="px-3 py-2">Notes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {sorted.map((d) => (
-                <tr key={d._id} className="text-slate-700">
-                  <td className="px-3 py-2 font-medium">
-                    {LEAD_DOCUMENT_TYPE_OPTIONS.find((o) => o.value === d.type)?.label ?? d.type}
-                  </td>
-                  <td className="px-3 py-2">{d.reference || '—'}</td>
-                  <td className="px-3 py-2">{d.amount || '—'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{formatDate(d.sentAt)}</td>
-                  <td className="px-3 py-2">{documentSentByLabel(d)}</td>
-                  <td className="max-w-[200px] px-3 py-2 text-xs text-slate-600">
-                    <span className="line-clamp-2 whitespace-pre-wrap">{d.notes || '—'}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="mt-4 text-center text-sm text-slate-500">No documents logged yet.</p>
-      )}
-    </div>
-  );
-}
-
 function LeadDetailModal({
   id,
   onClose,
@@ -1783,7 +1602,6 @@ function LeadDetailModal({
                     <p className="mt-2 text-sm text-red-600">{(uploadAttachmentsMutation.error as Error).message}</p>
                   )}
                   </div>
-                  <LeadDocumentsLog leadId={id} documents={lead.documentsSent} />
                   <LeadLinkedInvoicesSection leadId={id} />
                   <div className="flex flex-col-reverse gap-2 border-t border-slate-200/80 pt-4 sm:flex-row sm:justify-end">
                     <Button
@@ -1849,7 +1667,6 @@ function LeadDetailModal({
                 )}
                 {lead.notes && <div><p className="text-sm text-slate-500">Notes</p><p className="whitespace-pre-wrap text-slate-800">{lead.notes}</p></div>}
                 <LeadLinkedInvoicesSection leadId={id} />
-                <LeadDocumentsLog leadId={id} documents={lead.documentsSent} />
                 <div className="flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-4">
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setEditing(true)}>Edit</Button>
