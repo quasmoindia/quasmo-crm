@@ -37,6 +37,11 @@ import {
 } from '../api/signaturePresets';
 import { useCurrentUser } from '../api/auth';
 import type { TaxInvoice, TaxInvoiceLineItem, TaxInvoiceLineItemSuggestion } from '../types/taxInvoice';
+import type { Lead } from '../types/lead';
+import type { TaxDocumentKind } from '../types/taxDocumentKind';
+import { DOCUMENT_KIND_OPTIONS } from '../types/taxDocumentKind';
+import type { BankAccount } from '../types/bankAccount';
+import type { SignaturePreset, SignaturePresetSlot } from '../types/signaturePreset';
 
 /** Line row in the editor: qty/price may be '' while the number input is cleared. */
 type InvoiceLineFormRow = Omit<TaxInvoiceLineItem, 'qty' | 'price'> & {
@@ -49,11 +54,52 @@ function lineNumericValue(v: number | ''): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-import type { Lead } from '../types/lead';
-import type { TaxDocumentKind } from '../types/taxDocumentKind';
-import { DOCUMENT_KIND_OPTIONS } from '../types/taxDocumentKind';
-import type { BankAccount } from '../types/bankAccount';
-import type { SignaturePreset, SignaturePresetSlot } from '../types/signaturePreset';
+
+/** Full invoice editor state (line items allow empty qty/price while typing). */
+type TaxInvoiceEditorForm = {
+  documentKind: TaxDocumentKind;
+  leadId: string;
+  bankAccountId: string;
+  signaturePresetId: string;
+  shipSameAsBill: boolean;
+  sellerGstin: string;
+  sellerName: string;
+  sellerAddress: string;
+  sellerPhonesText: string;
+  sellerEmailsText: string;
+  copyLabel: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  placeOfSupply: string;
+  transport: string;
+  vehicleNo: string;
+  paymentTerms: string;
+  ewayBillNo: string;
+  dateOfRemoval: string;
+  freight: string;
+  billedToName: string;
+  billedToAddress: string;
+  billedToGstin: string;
+  shippedToName: string;
+  shippedToAddress: string;
+  shippedToContact: string;
+  shippedToGstin: string;
+  contractNo: string;
+  remarks: string;
+  items: InvoiceLineFormRow[];
+  gstRate: number;
+  bankName: string;
+  bankAccountNo: string;
+  bankIfsc: string;
+  bankBranch: string;
+  bankUpiId: string;
+  bankQrUrl: string;
+  termsAndConditions: string;
+  amountInWords: string;
+  issuerSignatureUrl: string;
+  issuerStampUrl: string;
+  issuerDigitalSignatureUrl: string;
+};
 
 const EMPTY_LINE: InvoiceLineFormRow = {
   description: '',
@@ -63,7 +109,7 @@ const EMPTY_LINE: InvoiceLineFormRow = {
   price: 0,
 };
 
-const DEFAULT_FORM = {
+const DEFAULT_FORM: TaxInvoiceEditorForm = {
   documentKind: 'tax_invoice' as TaxDocumentKind,
   leadId: '' as string,
   bankAccountId: '' as string,
@@ -165,7 +211,7 @@ function kindLabel(kind: string | undefined) {
   return DOCUMENT_KIND_OPTIONS.find((o) => o.value === kind)?.label ?? 'Tax invoice';
 }
 
-function invoiceToForm(inv: TaxInvoice): typeof DEFAULT_FORM {
+function invoiceToForm(inv: TaxInvoice): TaxInvoiceEditorForm {
   const bid = inv.bankAccountId;
   const bankIdStr = typeof bid === 'object' && bid?._id ? bid._id : (bid as string) || '';
   const sid = inv.signaturePresetId;
@@ -222,7 +268,7 @@ function invoiceToForm(inv: TaxInvoice): typeof DEFAULT_FORM {
 }
 
 function formToPayload(
-  f: typeof DEFAULT_FORM,
+  f: TaxInvoiceEditorForm,
   opts?: { clearLeadIfEmpty?: boolean; omitInvoiceNo?: boolean }
 ): Record<string, unknown> {
   const leadPayload =
@@ -603,7 +649,7 @@ function InvoiceEditorModal({
   const { data: sigPresetsRes } = useSignaturePresets();
   const signaturePresets = sigPresetsRes?.data ?? [];
 
-  const [f, setF] = useState(() => ({ ...DEFAULT_FORM }));
+  const [f, setF] = useState<TaxInvoiceEditorForm>(() => ({ ...DEFAULT_FORM }));
 
   const [lineDescFocusRow, setLineDescFocusRow] = useState<number | null>(null);
   const lineDescBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
