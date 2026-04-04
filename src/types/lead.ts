@@ -2,9 +2,7 @@
 export type LeadStatus =
   | 'new'
   | 'contacted'
-  | 'qualified'
   | 'proposal'
-  | 'invoice_sent'
   | 'closed'
   | 'lost';
 
@@ -98,9 +96,7 @@ export interface AddLeadDocumentPayload {
 export const LEAD_STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: 'new', label: 'New' },
   { value: 'contacted', label: 'Contacted' },
-  { value: 'qualified', label: 'Qualified' },
   { value: 'proposal', label: 'Proposal' },
-  { value: 'invoice_sent', label: 'Invoice sent' },
   { value: 'closed', label: 'Closed (won)' },
   { value: 'lost', label: 'Lost' },
 ];
@@ -109,9 +105,7 @@ export const LEAD_STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
 export const LEAD_STATUS_STYLES: Record<LeadStatus, string> = {
   new: 'bg-sky-100 text-sky-800',
   contacted: 'bg-blue-100 text-blue-800',
-  qualified: 'bg-cyan-100 text-cyan-800',
   proposal: 'bg-amber-100 text-amber-800',
-  invoice_sent: 'bg-teal-100 text-teal-800',
   closed: 'bg-emerald-100 text-emerald-800',
   lost: 'bg-slate-200 text-slate-700',
 };

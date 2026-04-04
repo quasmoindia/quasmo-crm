@@ -361,9 +361,7 @@ function LeadKanbanCard({
 const LEAD_COLUMN_COLORS: Record<LeadStatus, string> = {
   new: 'bg-sky-50 border-sky-200',
   contacted: 'bg-blue-50 border-blue-200',
-  qualified: 'bg-cyan-50 border-cyan-200',
   proposal: 'bg-amber-50 border-amber-200',
-  invoice_sent: 'bg-teal-50 border-teal-200',
   closed: 'bg-emerald-50 border-emerald-200',
   lost: 'bg-slate-100 border-slate-300',
 };
