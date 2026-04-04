@@ -361,9 +361,7 @@ function LeadKanbanCard({
 const LEAD_COLUMN_COLORS: Record<LeadStatus, string> = {
   new: 'bg-sky-50 border-sky-200',
   contacted: 'bg-blue-50 border-blue-200',
-  qualified: 'bg-cyan-50 border-cyan-200',
   proposal: 'bg-amber-50 border-amber-200',
-  invoice_sent: 'bg-teal-50 border-teal-200',
   closed: 'bg-emerald-50 border-emerald-200',
   lost: 'bg-slate-100 border-slate-300',
 };
@@ -1515,11 +1513,7 @@ function LeadDetailModal({
                         placeholder="Internal notes…"
                       />
                     </section>
-                  </div>
-                </div>
-
-                <div className="shrink-0 space-y-4 border-t border-slate-100 bg-slate-50/50 px-5 py-4 sm:px-6">
-                  <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm">
+                    <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm">
                   <p className="mb-2 text-sm font-medium text-slate-700">Attachments</p>
                   {(attachments.length > 0 || pendingAttachmentFiles.length > 0) && (
                     <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -1603,7 +1597,11 @@ function LeadDetailModal({
                   )}
                   </div>
                   <LeadLinkedInvoicesSection leadId={id} />
-                  <div className="flex flex-col-reverse gap-2 border-t border-slate-200/80 pt-4 sm:flex-row sm:justify-end">
+                  </div>
+                </div>
+
+                <div className="shrink-0 border-t border-slate-100 bg-slate-50/50 px-5 py-4 sm:px-6">
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                     <Button
                       variant="outline"
                       onClick={() => {
