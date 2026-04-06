@@ -4,7 +4,7 @@ import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
 import { useUsersList, useCreateUser, useUpdateUser, useDeleteUser } from '../api/users';
-import { useHexaUsersList, useCreateHexaUser } from '../api/hexaUsers';
+import { useHexaUsersList, useCreateHexaUser, useUpdateHexaUser, useDeleteHexaUser } from '../api/hexaUsers';
 import { useRolesConfig } from '../api/config';
 import type { UserRecord, RoleOption } from '../types/user';
 import type { HexaUserRecord } from '../types/hexaUser';
@@ -60,6 +60,7 @@ export function UserManagement() {
   const [createOpen, setCreateOpen] = useState(false);
   const [hexaCreateOpen, setHexaCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
+  const [editingHexaUser, setEditingHexaUser] = useState<HexaUserRecord | null>(null);
   const { data, isLoading, isError, error } = useUsersList({ enabled: tab === 'crm' });
   const {
     data: hexaData,
@@ -70,6 +71,8 @@ export function UserManagement() {
   const roleLabels = useRoleLabels();
   const createMutation = useCreateUser();
   const createHexaMutation = useCreateHexaUser();
+  const updateHexaMutation = useUpdateHexaUser();
+  const deleteHexaMutation = useDeleteHexaUser();
   const updateMutation = useUpdateUser();
   const deleteMutation = useDeleteUser();
 
@@ -117,6 +120,28 @@ export function UserManagement() {
       key: 'createdAt',
       label: 'Created',
       render: (u: HexaUserRecord) => formatDate(u.createdAt),
+    },
+    {
+      key: 'actions',
+      label: '',
+      render: (u: HexaUserRecord) => (
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setEditingHexaUser(u)}>
+            Edit
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (window.confirm(`Delete Hexa user "${u.fullName}" (${u.email})? This cannot be undone.`)) {
+                deleteHexaMutation.mutate(u._id);
+              }
+            }}
+            disabled={deleteHexaMutation.isPending}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
     },
   ];
 
@@ -201,6 +226,15 @@ export function UserManagement() {
           onClose={() => setHexaCreateOpen(false)}
           onSuccess={() => setHexaCreateOpen(false)}
           mutation={createHexaMutation}
+        />
+      )}
+
+      {editingHexaUser && (
+        <EditHexaUserModal
+          user={editingHexaUser}
+          onClose={() => setEditingHexaUser(null)}
+          onSuccess={() => setEditingHexaUser(null)}
+          mutation={updateHexaMutation}
         />
       )}
 
@@ -323,6 +357,123 @@ function CreateHexaUserModal({
             </Button>
             <Button type="submit" loading={mutation.isPending}>
               Create Hexa user
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function EditHexaUserModal({
+  user,
+  onClose,
+  onSuccess,
+  mutation,
+}: {
+  user: HexaUserRecord;
+  onClose: () => void;
+  onSuccess: () => void;
+  mutation: ReturnType<typeof useUpdateHexaUser>;
+}) {
+  const [fullName, setFullName] = useState(user.fullName);
+  const [email, setEmail] = useState(user.email);
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!fullName.trim() || !email.trim()) {
+      setError('Full name and email are required');
+      return;
+    }
+    if (password && password.length < 6) {
+      setError('New password must be at least 6 characters');
+      return;
+    }
+    mutation.mutate(
+      {
+        id: user._id,
+        payload: {
+          fullName: fullName.trim(),
+          email: email.trim(),
+          ...(password ? { password } : {}),
+        },
+      },
+      { onSuccess, onError: (err: Error) => setError(err.message) }
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-hexa-user-title"
+    >
+      <div
+        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 id="edit-hexa-user-title" className="text-lg font-semibold text-slate-800">
+            Edit Hexa portal user
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close"
+          >
+            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {error && (
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">
+              {error}
+            </div>
+          )}
+          <Input
+            label="Full name"
+            type="text"
+            autoComplete="name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="John Doe"
+            disabled={mutation.isPending}
+            required
+          />
+          <Input
+            label="Email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="user@example.com"
+            disabled={mutation.isPending}
+            required
+          />
+          <Input
+            label="New password (optional)"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Leave blank to keep current password"
+            disabled={mutation.isPending}
+            showPasswordToggle
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={mutation.isPending}>
+              Save
             </Button>
           </div>
         </form>

@@ -15,3 +15,10 @@ export interface CreateHexaUserPayload {
   email: string;
   password: string;
 }
+
+export interface UpdateHexaUserPayload {
+  fullName: string;
+  email: string;
+  /** If set and non-empty, replaces the password */
+  password?: string;
+}
