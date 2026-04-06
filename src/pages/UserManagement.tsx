@@ -4,8 +4,10 @@ import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
 import { useUsersList, useCreateUser, useUpdateUser, useDeleteUser } from '../api/users';
+import { useHexaUsersList, useCreateHexaUser } from '../api/hexaUsers';
 import { useRolesConfig } from '../api/config';
 import type { UserRecord, RoleOption } from '../types/user';
+import type { HexaUserRecord } from '../types/hexaUser';
 import { getRoleLabel } from '../config/roles';
 
 function useRoleLabels() {
@@ -51,16 +53,28 @@ function formatDate(iso: string) {
   });
 }
 
+type UserTab = 'crm' | 'hexa';
+
 export function UserManagement() {
+  const [tab, setTab] = useState<UserTab>('crm');
   const [createOpen, setCreateOpen] = useState(false);
+  const [hexaCreateOpen, setHexaCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
-  const { data, isLoading, isError, error } = useUsersList();
+  const { data, isLoading, isError, error } = useUsersList({ enabled: tab === 'crm' });
+  const {
+    data: hexaData,
+    isLoading: hexaLoading,
+    isError: hexaIsError,
+    error: hexaError,
+  } = useHexaUsersList({ enabled: tab === 'hexa' });
   const roleLabels = useRoleLabels();
   const createMutation = useCreateUser();
+  const createHexaMutation = useCreateHexaUser();
   const updateMutation = useUpdateUser();
   const deleteMutation = useDeleteUser();
 
   const users = data?.data ?? [];
+  const hexaUsers = hexaData?.data ?? [];
 
   const columns = [
     { key: 'fullName', label: 'Full name', render: (u: UserRecord) => <span className="font-medium text-slate-800">{u.fullName}</span> },
@@ -92,23 +106,84 @@ export function UserManagement() {
     },
   ];
 
+  const hexaColumns = [
+    {
+      key: 'fullName',
+      label: 'Full name',
+      render: (u: HexaUserRecord) => <span className="font-medium text-slate-800">{u.fullName}</span>,
+    },
+    { key: 'email', label: 'Email', render: (u: HexaUserRecord) => u.email },
+    {
+      key: 'createdAt',
+      label: 'Created',
+      render: (u: HexaUserRecord) => formatDate(u.createdAt),
+    },
+  ];
+
   return (
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">User management</h1>
-        <Button onClick={() => setCreateOpen(true)}>Create user</Button>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">User management</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            CRM staff accounts and separate Hexa portal logins ({' '}
+            <code className="rounded bg-slate-100 px-1 text-xs">HexaUser</code>).
+          </p>
+        </div>
+        {tab === 'crm' ? (
+          <Button onClick={() => setCreateOpen(true)}>Create CRM user</Button>
+        ) : (
+          <Button onClick={() => setHexaCreateOpen(true)}>Create Hexa user</Button>
+        )}
+      </div>
+
+      <div className="mb-4 flex gap-1 rounded-lg border border-slate-200 bg-slate-100/80 p-1">
+        <button
+          type="button"
+          onClick={() => setTab('crm')}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            tab === 'crm'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          CRM team
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('hexa')}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            tab === 'hexa'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Hexa portal
+        </button>
       </div>
 
       <Card>
-        {isError ? (
-          <p className="py-8 text-center text-red-600">{(error as Error).message}</p>
+        {tab === 'crm' ? (
+          isError ? (
+            <p className="py-8 text-center text-red-600">{(error as Error).message}</p>
+          ) : (
+            <DataTable<UserRecord>
+              columns={columns}
+              data={users}
+              rowKey={(u) => u._id}
+              isLoading={isLoading}
+              emptyMessage="No CRM users yet."
+            />
+          )
+        ) : hexaIsError ? (
+          <p className="py-8 text-center text-red-600">{(hexaError as Error).message}</p>
         ) : (
-          <DataTable<UserRecord>
-            columns={columns}
-            data={users}
+          <DataTable<HexaUserRecord>
+            columns={hexaColumns}
+            data={hexaUsers}
             rowKey={(u) => u._id}
-            isLoading={isLoading}
-            emptyMessage="No users yet."
+            isLoading={hexaLoading}
+            emptyMessage="No Hexa portal users yet."
           />
         )}
       </Card>
@@ -121,6 +196,14 @@ export function UserManagement() {
         />
       )}
 
+      {hexaCreateOpen && (
+        <CreateHexaUserModal
+          onClose={() => setHexaCreateOpen(false)}
+          onSuccess={() => setHexaCreateOpen(false)}
+          mutation={createHexaMutation}
+        />
+      )}
+
       {editingUser && (
         <EditUserModal
           user={editingUser}
@@ -129,6 +212,121 @@ export function UserManagement() {
           mutation={updateMutation}
         />
       )}
+    </div>
+  );
+}
+
+function CreateHexaUserModal({
+  onClose,
+  onSuccess,
+  mutation,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+  mutation: ReturnType<typeof useCreateHexaUser>;
+}) {
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!fullName.trim() || !email.trim() || !password) {
+      setError('Full name, email and password are required');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    mutation.mutate(
+      { fullName: fullName.trim(), email: email.trim(), password },
+      {
+        onSuccess,
+        onError: (err) => setError(err.message),
+      }
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-hexa-user-title"
+    >
+      <div
+        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 id="create-hexa-user-title" className="text-lg font-semibold text-slate-800">
+            Create Hexa portal user
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close"
+          >
+            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <p className="mb-4 text-sm text-slate-600">
+          This account uses the Hexa auth flow (mobile / portal). It is not a CRM role or module assignment.
+        </p>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {error && (
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">
+              {error}
+            </div>
+          )}
+          <Input
+            label="Full name"
+            type="text"
+            autoComplete="name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="John Doe"
+            disabled={mutation.isPending}
+            required
+          />
+          <Input
+            label="Email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="user@example.com"
+            disabled={mutation.isPending}
+            required
+          />
+          <Input
+            label="Password"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="At least 6 characters"
+            disabled={mutation.isPending}
+            showPasswordToggle
+            required
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={mutation.isPending}>
+              Create Hexa user
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
