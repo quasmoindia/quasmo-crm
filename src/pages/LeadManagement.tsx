@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
-import { Link } from 'react-router-dom';
 import { FiList, FiGrid, FiUpload, FiDownload, FiFile, FiMessageCircle, FiEye } from 'react-icons/fi';
 import {
   DndContext,
@@ -34,6 +33,7 @@ import {
   getTaxInvoicePreviewApi,
   downloadTaxInvoicePdfApi,
 } from '../api/taxInvoices';
+import { useConvertLeadToCustomer } from '../api/customers';
 import type { Lead, LeadStatus, LeadSource, CreateLeadPayload } from '../types/lead';
 import { LEAD_STATUS_OPTIONS, LEAD_SOURCE_OPTIONS, LEAD_STATUS_STYLES } from '../types/lead';
 import type { TaxInvoice } from '../types/taxInvoice';
@@ -203,9 +203,11 @@ function LeadLinkedInvoicesSection({ leadId }: { leadId: string }) {
       <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-slate-800">Tax invoices &amp; quotes (this lead)</h3>
-          <Link to="/dashboard/invoices" className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
-            Open invoices page →
-          </Link>
+          {rows.length > 0 && (
+            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+              {rows.length} linked
+            </span>
+          )}
         </div>
         <p className="mb-3 text-xs text-slate-500">
           Documents you create under <strong>Tax invoices</strong> with this lead selected are listed here. Preview or download PDF.
@@ -803,6 +805,8 @@ function CreateLeadModal({
   onSuccess: () => void;
   mutation: ReturnType<typeof useCreateLead>;
 }) {
+  const { data: auth } = useCurrentUser();
+  const isAdmin = auth?.user?.role === 'admin';
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -820,13 +824,13 @@ function CreateLeadModal({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!name.trim() || !phone.trim()) {
-      setError('Name and phone are required');
+    if (!name.trim()) {
+      setError('Name is required');
       return;
     }
     const payload: CreateLeadPayload = {
       name: name.trim(),
-      phone: phone.trim(),
+      phone: phone.trim() || undefined,
       email: email.trim() || undefined,
       company: company.trim() || undefined,
       address: address.trim() || undefined,
@@ -904,7 +908,6 @@ function CreateLeadModal({
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="Phone number"
                     disabled={mutation.isPending}
-                    required
                   />
                   <div className="md:col-span-2">
                     <Input
@@ -1046,22 +1049,24 @@ function CreateLeadModal({
                       ))}
                     </select>
                   </div>
-                  <div className="sm:col-span-2 lg:col-span-1">
-                    <label className="mb-1.5 block text-sm font-medium text-slate-700">Assign to</label>
-                    <select
-                      value={assignedTo}
-                      onChange={(e) => setAssignedTo(e.target.value)}
-                      disabled={mutation.isPending}
-                      className={LEAD_SELECT_CLASS}
-                    >
-                      <option value="">Unassigned</option>
-                      {users.map((u) => (
-                        <option key={u._id} value={u._id}>
-                          {u.fullName}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {isAdmin && (
+                    <div className="sm:col-span-2 lg:col-span-1">
+                      <label className="mb-1.5 block text-sm font-medium text-slate-700">Assign to</label>
+                      <select
+                        value={assignedTo}
+                        onChange={(e) => setAssignedTo(e.target.value)}
+                        disabled={mutation.isPending}
+                        className={LEAD_SELECT_CLASS}
+                      >
+                        <option value="">Unassigned</option>
+                        {users.map((u) => (
+                          <option key={u._id} value={u._id}>
+                            {u.fullName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -1230,8 +1235,11 @@ function LeadDetailModal({
   setDeleteTarget: (l: Lead | null) => void;
   canDelete: boolean;
 }) {
+  const { data: auth } = useCurrentUser();
+  const isAdmin = auth?.user?.role === 'admin';
   const { data: lead, isLoading } = useLead(id);
   const updateMutation = useUpdateLead();
+  const convertMutation = useConvertLeadToCustomer();
   const uploadAttachmentsMutation = useUploadLeadAttachments(id);
   const { data: usersData } = useAssignableUsers();
   const users = usersData?.data ?? [];
@@ -1483,22 +1491,24 @@ function LeadDetailModal({
                             ))}
                           </select>
                         </div>
-                        <div className="sm:col-span-2 lg:col-span-1">
-                          <label className="mb-1.5 block text-sm font-medium text-slate-700">Assign to</label>
-                          <select
-                            value={assignedTo}
-                            onChange={(e) => setAssignedTo(e.target.value)}
-                            disabled={saving}
-                            className={LEAD_SELECT_CLASS}
-                          >
-                            <option value="">Unassigned</option>
-                            {users.map((u) => (
-                              <option key={u._id} value={u._id}>
-                                {u.fullName}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        {isAdmin && (
+                          <div className="sm:col-span-2 lg:col-span-1">
+                            <label className="mb-1.5 block text-sm font-medium text-slate-700">Assign to</label>
+                            <select
+                              value={assignedTo}
+                              onChange={(e) => setAssignedTo(e.target.value)}
+                              disabled={saving}
+                              className={LEAD_SELECT_CLASS}
+                            >
+                              <option value="">Unassigned</option>
+                              {users.map((u) => (
+                                <option key={u._id} value={u._id}>
+                                  {u.fullName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
                     </section>
 
@@ -1666,8 +1676,25 @@ function LeadDetailModal({
                 {lead.notes && <div><p className="text-sm text-slate-500">Notes</p><p className="whitespace-pre-wrap text-slate-800">{lead.notes}</p></div>}
                 <LeadLinkedInvoicesSection leadId={id} />
                 <div className="flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-4">
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={() => setEditing(true)}>Edit</Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={async () => {
+                        if (confirm('Are you sure you want to convert this lead to a customer? This will close the lead.')) {
+                          try {
+                            await convertMutation.mutateAsync(id);
+                            alert('Successfully converted to customer!');
+                            onClose();
+                          } catch (err) {
+                            alert((err as Error).message || 'Failed to convert lead');
+                          }
+                        }
+                      }}
+                      loading={convertMutation.isPending}
+                    >
+                      Convert to Customer
+                    </Button>
                     {lead.phone && (
                       <Button variant="outline" onClick={() => onMessage({ name: lead.name, phone: lead.phone })}>
                         <FiMessageCircle className="mr-1 inline size-4" aria-hidden />

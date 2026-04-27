@@ -61,7 +61,7 @@ export interface LeadsListResponse {
 
 export interface CreateLeadPayload {
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
   company?: string;
   address?: string;

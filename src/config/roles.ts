@@ -6,11 +6,25 @@
 /** Role id -> module ids ('*' = all modules) */
 export const ROLE_MODULE_MAP: Record<string, readonly string[]> = {
   admin: ['*'],
-  user: ['dashboard', 'complaints', 'leads', 'invoices'],
+  user: ['dashboard', 'complaints', 'leads', 'invoices', 'expenses', 'products', 'customers', 'orders', 'documents'],
   viewer: ['dashboard'],
   // content_writer: ['dashboard', 'content'],
   // sales_manager: ['dashboard', 'sales', 'leads'],
   technician: ['dashboard', 'complaints'],
+};
+
+export const MODULE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  users: 'User management',
+  roles: 'Role management',
+  complaints: 'Complaint management',
+  leads: 'Lead management',
+  invoices: 'Tax invoices',
+  products: 'Products',
+  customers: 'Customers',
+  orders: 'Order Processing',
+  expenses: 'Expenses',
+  documents: 'Documents',
 };
 
 /** Role id -> display label (fallback if API not used) */
@@ -35,9 +49,14 @@ export const NAV_MODULES: NavModule[] = [
   { moduleId: 'dashboard', label: 'Dashboard', path: '/dashboard', end: true },
   { moduleId: 'users', label: 'User management', path: '/dashboard/users', end: false },
   { moduleId: 'roles', label: 'Role management', path: '/dashboard/roles', end: false },
-  { moduleId: 'complaints', label: 'Complaint management', path: '/dashboard/complaints', end: false },
   { moduleId: 'leads', label: 'Lead management', path: '/dashboard/leads', end: false },
+  { moduleId: 'customers', label: 'Customers', path: '/dashboard/customers', end: false },
   { moduleId: 'invoices', label: 'Tax invoices', path: '/dashboard/invoices', end: false },
+  { moduleId: 'products', label: 'Products', path: '/dashboard/products', end: false },
+  { moduleId: 'orders', label: 'Order Processing', path: '/dashboard/orders', end: false },
+  { moduleId: 'complaints', label: 'Complaint management', path: '/dashboard/complaints', end: false },
+  { moduleId: 'expenses', label: 'Expenses', path: '/dashboard/expenses', end: false },
+  { moduleId: 'documents', label: 'Documents', path: '/dashboard/documents', end: false },
   // Sales / Finance / Content – commented for now
   // { moduleId: 'sales', label: 'Sales management', path: '/dashboard/sales', end: false },
   // { moduleId: 'finance', label: 'Finance management', path: '/dashboard/finance', end: false },
@@ -53,6 +72,7 @@ export function canAccessModule(
   moduleId: string,
   roleModules?: string[]
 ): boolean {
+  if (role === 'admin') return true;
   if (roleModules !== undefined && roleModules !== null) {
     if (roleModules.includes('*')) return true;
     return roleModules.includes(moduleId);
