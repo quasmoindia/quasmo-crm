@@ -127,7 +127,7 @@ export function useTaxInvoicesList(params: { search?: string; page?: number; lim
 export function useTaxInvoicesByLead(leadId: string | null) {
   return useQuery({
     queryKey: leadId ? taxInvoicesByLeadKey(leadId) : [...taxInvoicesQueryKey, 'byLead', 'none'],
-    queryFn: () => listTaxInvoicesApi({ leadId: leadId!, limit: 50, page: 1 }),
+    queryFn: () => listTaxInvoicesApi({ leadId: leadId!, limit: 500, page: 1 }),
     enabled: !!leadId,
   });
 }

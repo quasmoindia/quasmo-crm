@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FiList, FiGrid, FiUpload, FiFile, FiMessageCircle, FiCopy } from 'react-icons/fi';
+import { FiList, FiGrid, FiUpload, FiFile, FiMessageCircle, FiCopy, FiEdit2, FiCheck, FiX } from 'react-icons/fi';
 import {
   DndContext,
   type DragEndEvent,
@@ -977,6 +977,13 @@ function ComplaintDetailModal({
   const [phone, setPhone] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
   const [editDirty, setEditDirty] = useState(false);
+
+  // Inline editable fields
+  const [editSubject, setEditSubject] = useState('');
+  const [editingSubject, setEditingSubject] = useState(false);
+  const [editPhone, setEditPhone] = useState('');
+  const [editingPhone, setEditingPhone] = useState(false);
+
   const uploadImagesMutation = useUploadComplaintImages(id);
   const addCommentMutation = useAddComplaintComment(id);
   const [commentText, setCommentText] = useState('');
@@ -1011,6 +1018,8 @@ function ComplaintDetailModal({
     setStatus(complaint.status);
     setPriority(complaint.priority);
     setPhone(complaint.phone ?? '');
+    setEditPhone(complaint.phone ?? '');
+    setEditSubject(complaint.subject ?? '');
     setInternalNotes(complaint.internalNotes ?? '');
     const a = complaint.assignedTo;
     setAssignedTo(typeof a === 'object' && a?._id ? a._id : typeof a === 'string' ? a : '');
@@ -1079,12 +1088,14 @@ function ComplaintDetailModal({
     const currentAssignedId = typeof complaint.assignedTo === 'object' && complaint.assignedTo?._id
       ? complaint.assignedTo._id
       : typeof complaint.assignedTo === 'string' ? complaint.assignedTo : '';
-    const payload: { status?: ComplaintStatus; priority?: ComplaintPriority; phone?: string; internalNotes?: string; assignedTo?: string | null } = {};
+    const payload: { subject?: string; status?: ComplaintStatus; priority?: ComplaintPriority; phone?: string; internalNotes?: string; assignedTo?: string | null } = {};
     if (newStatus !== complaint.status) payload.status = newStatus;
     if (newPriority !== complaint.priority) payload.priority = newPriority;
     if (newPhone !== currentPhone) payload.phone = newPhone;
     if (newNotes !== currentNotes) payload.internalNotes = newNotes;
     if (assignedTo !== currentAssignedId) payload.assignedTo = assignedTo || null;
+    const newSubject = editSubject.trim();
+    if (newSubject && newSubject !== complaint.subject.trim()) payload.subject = newSubject;
 
     const hasFieldChanges = Object.keys(payload).length > 0;
     const hasPendingAttachments = pendingAttachmentFiles.length > 0;
@@ -1135,8 +1146,55 @@ function ComplaintDetailModal({
             />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Subject</p>
-            <p className="text-base font-semibold text-slate-900">{complaint.subject}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-slate-500">Subject</p>
+              {!editingSubject && (
+                <button
+                  type="button"
+                  onClick={() => { setEditSubject(complaint.subject); setEditingSubject(true); }}
+                  className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition-colors"
+                  title="Edit subject"
+                  aria-label="Edit subject"
+                >
+                  <FiEdit2 className="size-3.5" aria-hidden />
+                </button>
+              )}
+            </div>
+            {editingSubject ? (
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editSubject}
+                  onChange={(e) => { setEditSubject(e.target.value); setEditDirty(true); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); setEditingSubject(false); }
+                    if (e.key === 'Escape') { setEditSubject(complaint.subject); setEditingSubject(false); }
+                  }}
+                  autoFocus
+                  className="flex-1 rounded-lg border border-indigo-400 bg-white px-3 py-1.5 text-sm font-semibold text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                />
+                <button
+                  type="button"
+                  onClick={() => setEditingSubject(false)}
+                  className="rounded-lg bg-indigo-600 p-1.5 text-white hover:bg-indigo-700"
+                  title="Confirm"
+                  aria-label="Confirm subject edit"
+                >
+                  <FiCheck className="size-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEditSubject(complaint.subject); setEditingSubject(false); }}
+                  className="rounded-lg bg-slate-100 p-1.5 text-slate-600 hover:bg-slate-200"
+                  title="Cancel"
+                  aria-label="Cancel subject edit"
+                >
+                  <FiX className="size-4" aria-hidden />
+                </button>
+              </div>
+            ) : (
+              <p className="mt-0.5 text-base font-semibold text-slate-900">{editSubject || complaint.subject}</p>
+            )}
             <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
               {complaint.description}
             </p>
@@ -1153,8 +1211,56 @@ function ComplaintDetailModal({
               )}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-slate-500">Complaint contact phone</p>
-              <p className="break-all text-slate-800">{complaint.phone?.trim() || '—'}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-slate-500">Complaint contact phone</p>
+                {!editingPhone && (
+                  <button
+                    type="button"
+                    onClick={() => { setEditPhone(phone || complaint.phone || ''); setEditingPhone(true); }}
+                    className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition-colors"
+                    title="Edit phone"
+                    aria-label="Edit contact phone"
+                  >
+                    <FiEdit2 className="size-3.5" aria-hidden />
+                  </button>
+                )}
+              </div>
+              {editingPhone ? (
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => { setEditPhone(e.target.value); setPhone(e.target.value); setEditDirty(true); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); setEditingPhone(false); }
+                      if (e.key === 'Escape') { setEditPhone(phone || complaint.phone || ''); setEditingPhone(false); }
+                    }}
+                    autoFocus
+                    placeholder="+91 98765 43210"
+                    className="w-full rounded-lg border border-indigo-400 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditingPhone(false)}
+                    className="rounded-lg bg-indigo-600 p-1.5 text-white hover:bg-indigo-700"
+                    title="Confirm"
+                    aria-label="Confirm phone edit"
+                  >
+                    <FiCheck className="size-4" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setEditPhone(phone || complaint.phone || ''); setEditingPhone(false); }}
+                    className="rounded-lg bg-slate-100 p-1.5 text-slate-600 hover:bg-slate-200"
+                    title="Cancel"
+                    aria-label="Cancel phone edit"
+                  >
+                    <FiX className="size-4" aria-hidden />
+                  </button>
+                </div>
+              ) : (
+                <p className="break-all text-slate-800">{editPhone || complaint.phone?.trim() || '—'}</p>
+              )}
               <p className="mt-1 text-xs text-slate-500">Number for this complaint (customer / site contact)</p>
             </div>
           </div>
@@ -1198,7 +1304,7 @@ function ComplaintDetailModal({
           )}
 
           <hr className="border-slate-200" />
-          <p className="text-sm font-medium text-slate-700">Update status / priority / assignee / phone</p>
+          <p className="text-sm font-medium text-slate-700">Update status / priority / assignee</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="min-w-0">
               <label className="mb-1 block text-sm text-slate-600">Status</label>

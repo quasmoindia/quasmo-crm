@@ -44,9 +44,10 @@ import type { BankAccount } from '../types/bankAccount';
 import type { SignaturePreset, SignaturePresetSlot } from '../types/signaturePreset';
 
 /** Line row in the editor: qty/price may be '' while the number input is cleared. */
-type InvoiceLineFormRow = Omit<TaxInvoiceLineItem, 'qty' | 'price'> & {
+type InvoiceLineFormRow = Omit<TaxInvoiceLineItem, 'qty' | 'price' | 'taxRate'> & {
   qty: number | '';
   price: number | '';
+  taxRate: number | '';
 };
 
 function lineNumericValue(v: number | ''): number {
@@ -96,6 +97,7 @@ type TaxInvoiceEditorForm = {
   bankQrUrl: string;
   termsAndConditions: string;
   amountInWords: string;
+  isRoundOff: boolean;
   issuerSignatureUrl: string;
   issuerStampUrl: string;
   issuerDigitalSignatureUrl: string;
@@ -107,6 +109,7 @@ const EMPTY_LINE: InvoiceLineFormRow = {
   qty: 1,
   unit: 'Pcs.',
   price: 0,
+  taxRate: 18,
 };
 
 const DEFAULT_FORM: TaxInvoiceEditorForm = {
@@ -139,7 +142,7 @@ const DEFAULT_FORM: TaxInvoiceEditorForm = {
   shippedToGstin: '',
   contractNo: '',
   remarks: '',
-  items: [{ ...EMPTY_LINE, description: '', hsnSac: '90118000', qty: 1, unit: 'Pcs.', price: 0 }],
+  items: [{ ...EMPTY_LINE, description: '', hsnSac: '90118000', qty: 1, unit: 'Pcs.', price: 0, taxRate: 18 }],
   gstRate: 18,
   bankName: '',
   bankAccountNo: '',
@@ -150,6 +153,7 @@ const DEFAULT_FORM: TaxInvoiceEditorForm = {
   termsAndConditions:
     'E. & O.E.\nGoods once sold will not be taken back.\nInterest @18% p.a. will be charged if the payment is not made within due date.\nSubject to Ambala jurisdiction.',
   amountInWords: '',
+  isRoundOff: false,
   issuerSignatureUrl: '',
   issuerStampUrl: '',
   issuerDigitalSignatureUrl: '',
@@ -162,6 +166,53 @@ const SIG_SLOTS: { key: SigSlot; label: string; help: string }[] = [
   { key: 'stamp', label: 'Stamp image', help: 'Company stamp' },
   { key: 'digitalSignature', label: 'Digital signature', help: 'e.g. .png from DSC or signing app' },
 ];
+
+const ones = [
+  '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'
+];
+const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+function twoDigits(n: number): string {
+  if (n < 20) return ones[n]!;
+  const t = Math.floor(n / 10);
+  const o = n % 10;
+  return o ? `${tens[t]!} ${ones[o]!}` : tens[t]!;
+}
+
+function threeDigits(n: number): string {
+  const h = Math.floor(n / 100);
+  const rest = n % 100;
+  const parts: string[] = [];
+  if (h) parts.push(`${ones[h]!} Hundred`);
+  if (rest) parts.push(twoDigits(rest));
+  return parts.join(' ');
+}
+
+function inrAmountToWords(num: number): string {
+  if (!Number.isFinite(num) || num < 0) return 'Zero';
+  const n = Math.floor(num);
+  if (n === 0) return 'Zero';
+
+  const crore = Math.floor(n / 10000000);
+  const lakh = Math.floor((n % 10000000) / 100000);
+  const thousand = Math.floor((n % 100000) / 1000);
+  const hundreds = n % 1000;
+
+  const chunks: string[] = [];
+  if (crore) chunks.push(`${threeDigits(crore)} Crore`.trim());
+  if (lakh) chunks.push(`${threeDigits(lakh)} Lakh`.trim());
+  if (thousand) chunks.push(`${threeDigits(thousand)} Thousand`.trim());
+  if (hundreds) chunks.push(threeDigits(hundreds));
+
+  return chunks.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function grandTotalToInvoiceWords(grandTotal: number): string {
+  const whole = Math.floor(grandTotal + 1e-6);
+  const words = inrAmountToWords(whole);
+  return `Rupees ${words} Only`;
+}
 
 function splitLines(s: string): string[] {
   return s
@@ -221,6 +272,9 @@ function invoiceToForm(inv: TaxInvoice): TaxInvoiceEditorForm {
     inv.billedToAddress === inv.shippedToAddress &&
     inv.billedToGstin === inv.shippedToGstin;
 
+  const generatedWords = grandTotalToInvoiceWords(inv.grandTotal ?? 0);
+  const isAutoAmountInWords = !inv.amountInWords || inv.amountInWords.trim() === generatedWords;
+
   return {
     documentKind: (inv.documentKind ?? 'tax_invoice') as TaxDocumentKind,
     leadId: typeof inv.leadId === 'object' && inv.leadId?._id ? inv.leadId._id : (inv.leadId as string) || '',
@@ -251,7 +305,7 @@ function invoiceToForm(inv: TaxInvoice): TaxInvoiceEditorForm {
     shippedToGstin: inv.shippedToGstin,
     contractNo: inv.contractNo,
     remarks: inv.remarks ?? '',
-    items: inv.items?.length ? inv.items.map((i) => ({ ...i })) : [{ ...EMPTY_LINE }],
+    items: inv.items?.length ? inv.items.map((i) => ({ ...i, taxRate: i.taxRate ?? '' })) : [{ ...EMPTY_LINE }],
     gstRate: effectiveGstRate(inv),
     bankName: inv.bankName,
     bankAccountNo: inv.bankAccountNo,
@@ -260,7 +314,8 @@ function invoiceToForm(inv: TaxInvoice): TaxInvoiceEditorForm {
     bankUpiId: inv.bankUpiId ?? '',
     bankQrUrl: inv.bankQrUrl ?? '',
     termsAndConditions: inv.termsAndConditions,
-    amountInWords: inv.amountInWords ?? '',
+    amountInWords: isAutoAmountInWords ? '' : (inv.amountInWords ?? ''),
+    isRoundOff: Boolean(inv.isRoundOff),
     issuerSignatureUrl: inv.issuerSignatureUrl ?? '',
     issuerStampUrl: inv.issuerStampUrl ?? '',
     issuerDigitalSignatureUrl: inv.issuerDigitalSignatureUrl ?? '',
@@ -318,9 +373,10 @@ function formToPayload(
       qty: lineNumericValue(i.qty),
       unit: i.unit || 'Pcs.',
       price: lineNumericValue(i.price),
-      amount: i.amount,
+      taxRate: i.taxRate !== '' ? Number(i.taxRate) : undefined,
     })),
     gstRate: Number(f.gstRate) || 0,
+    isRoundOff: Boolean(f.isRoundOff),
     bankName: f.bankName,
     bankAccountNo: f.bankAccountNo,
     bankIfsc: f.bankIfsc,
@@ -337,6 +393,18 @@ function formToPayload(
 
 function formatMoney(n: number) {
   return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Build a clean PDF filename from bill-to name and invoice number. */
+function buildInvoiceFilename(billedToName?: string, invoiceNo?: string): string {
+  const safe = (s?: string) =>
+    (s ?? '').trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_').replace(/^_+|_+$/g, '');
+  const namePart = safe(billedToName);
+  const noPart = safe(invoiceNo);
+  if (namePart && noPart) return `${namePart}_${noPart}.pdf`;
+  if (namePart) return `${namePart}.pdf`;
+  if (noPart) return `${noPart}.pdf`;
+  return 'Invoice.pdf';
 }
 
 export function TaxInvoiceManagement() {
@@ -415,7 +483,8 @@ export function TaxInvoiceManagement() {
             onClick={async () => {
               setPdfLoadingId(r._id);
               try {
-                const { blob, filename } = await downloadTaxInvoicePdfApi(r._id);
+                const { blob } = await downloadTaxInvoicePdfApi(r._id);
+                const filename = buildInvoiceFilename(r.billedToName, r.invoiceNo);
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -539,7 +608,9 @@ export function TaxInvoiceManagement() {
           onDownloadPdf={async () => {
             setPdfLoadingId(previewId);
             try {
-              const { blob, filename } = await downloadTaxInvoicePdfApi(previewId);
+              const { blob } = await downloadTaxInvoicePdfApi(previewId);
+              const inv = invoices.find((i) => i._id === previewId);
+              const filename = buildInvoiceFilename(inv?.billedToName, inv?.invoiceNo);
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
@@ -650,6 +721,7 @@ function InvoiceEditorModal({
   const signaturePresets = sigPresetsRes?.data ?? [];
 
   const [f, setF] = useState<TaxInvoiceEditorForm>(() => ({ ...DEFAULT_FORM }));
+  const lastGrandTotalRef = useRef<number | null>(null);
 
   const [lineDescFocusRow, setLineDescFocusRow] = useState<number | null>(null);
   const lineDescBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -775,6 +847,7 @@ function InvoiceEditorModal({
   useEffect(() => {
     if (invoiceId && existing) {
       setF(invoiceToForm(existing));
+      lastGrandTotalRef.current = null;
       setSigFiles({ signature: null, stamp: null, digitalSignature: null });
       setSigRemove({ signature: false, stamp: false, digitalSignature: false });
       setLeadQuery('');
@@ -789,6 +862,7 @@ function InvoiceEditorModal({
         invoiceNo: '',
         items: [{ ...EMPTY_LINE, hsnSac: '90118000' }],
       });
+      lastGrandTotalRef.current = null;
       setSigFiles({ signature: null, stamp: null, digitalSignature: null });
       setSigRemove({ signature: false, stamp: false, digitalSignature: false });
       setLeadQuery('');
@@ -936,6 +1010,7 @@ function InvoiceEditorModal({
       hsnSac: s.hsnSac ?? '',
       unit: u,
       price: Number(s.price) || 0,
+      taxRate: s.taxRate != null ? Number(s.taxRate) : 18,
     });
     setLineDescFocusRow(null);
   }
@@ -957,16 +1032,36 @@ function InvoiceEditorModal({
   const previewTotals = useMemo(() => {
     let taxable = 0;
     let qty = 0;
+    let gst = 0;
+    const docRate = Number(f.gstRate) || 0;
     for (const it of f.items) {
       const line = it.amount != null ? it.amount : lineNumericValue(it.qty) * lineNumericValue(it.price);
       taxable += line;
       qty += lineNumericValue(it.qty);
+      const rate = it.taxRate !== '' && Number.isFinite(Number(it.taxRate)) ? Number(it.taxRate) : docRate;
+      gst += (line * rate) / 100;
     }
     taxable = Math.round(taxable * 100) / 100;
-    const gst = Math.round((taxable * (Number(f.gstRate) || 0)) / 100 * 100) / 100;
-    const grand = Math.round((taxable + gst) * 100) / 100;
-    return { taxable, gst, grand, qty };
-  }, [f.items, f.gstRate]);
+    gst = Math.round(gst * 100) / 100;
+    
+    const grandBase = Math.round((taxable + gst) * 100) / 100;
+    let grand = grandBase;
+    let roundOff = 0;
+    
+    if (f.isRoundOff) {
+      grand = Math.round(grandBase);
+      roundOff = Math.round((grand - grandBase) * 100) / 100;
+    }
+    
+    return { taxable, gst, grand, roundOff, qty };
+  }, [f.items, f.gstRate, f.isRoundOff]);
+
+  useEffect(() => {
+    if (lastGrandTotalRef.current !== null && lastGrandTotalRef.current !== previewTotals.grand) {
+      setF((prev) => ({ ...prev, amountInWords: '' }));
+    }
+    lastGrandTotalRef.current = previewTotals.grand;
+  }, [previewTotals.grand]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1428,37 +1523,60 @@ function InvoiceEditorModal({
                       className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1 text-sm"
                     />
                   </div>
-                  <div className="flex items-end sm:col-span-2">
-                    <button type="button" onClick={() => removeRow(i)} className="text-sm text-red-600 hover:underline" disabled={busy}>
-                      Remove
+                  <div className="sm:col-span-1">
+                    <label className="text-xs text-slate-500">Tax %</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min={0}
+                      max={100}
+                      value={row.taxRate === '' ? '' : row.taxRate}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === '') updateItem(i, { taxRate: '' });
+                        else {
+                          const n = Number(v);
+                          if (!Number.isNaN(n)) updateItem(i, { taxRate: n });
+                        }
+                      }}
+                      disabled={busy}
+                      className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-end justify-center sm:col-span-1 pb-1">
+                    <button type="button" onClick={() => removeRow(i)} className="text-slate-400 hover:text-red-600 transition-colors" disabled={busy} title="Remove row">
+                      <FiTrash2 className="size-5" />
                     </button>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-600">
+            <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-600 items-center">
               <span>Taxable: <strong className="text-slate-800">₹ {formatMoney(previewTotals.taxable)}</strong></span>
-              <span>GST ({f.gstRate}%): <strong className="text-slate-800">₹ {formatMoney(previewTotals.gst)}</strong></span>
+              <span>Total GST: <strong className="text-slate-800">₹ {formatMoney(previewTotals.gst)}</strong></span>
+              {f.isRoundOff && <span>Round Off: <strong className="text-slate-800">{previewTotals.roundOff > 0 ? '+' : ''}{formatMoney(previewTotals.roundOff)}</strong></span>}
               <span>Grand: <strong className="text-slate-900">₹ {formatMoney(previewTotals.grand)}</strong></span>
+              <label className="ml-4 flex cursor-pointer items-center gap-1.5 border-l border-slate-200 pl-4">
+                <input
+                  type="checkbox"
+                  checked={f.isRoundOff}
+                  onChange={(e) => setField('isRoundOff', e.target.checked)}
+                  disabled={busy}
+                  className="rounded border-slate-300"
+                />
+                Apply Round Off
+              </label>
             </div>
           </section>
 
           <section className="mb-6 grid gap-3 sm:grid-cols-2">
-            <Input
-              label="GST %"
-              type="number"
-              step="any"
-              value={String(f.gstRate)}
-              onChange={(e) => setField('gstRate', Number(e.target.value) || 0)}
-              disabled={busy}
-            />
             <div className="sm:col-span-2">
               <Input
                 label="Amount in words (optional — auto if empty)"
                 value={f.amountInWords}
                 onChange={(e) => setField('amountInWords', e.target.value)}
                 disabled={busy}
-                placeholder="Rupees … Only"
+                placeholder={grandTotalToInvoiceWords(previewTotals.grand)}
               />
             </div>
           </section>

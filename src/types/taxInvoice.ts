@@ -6,6 +6,7 @@ export interface TaxInvoiceLineItem {
   qty: number;
   unit: string;
   price: number;
+  taxRate?: number;
   amount?: number;
 }
 
@@ -15,6 +16,7 @@ export interface TaxInvoiceLineItemSuggestion {
   hsnSac: string;
   unit: string;
   price: number;
+  taxRate?: number;
   lastUsed?: string;
 }
 
@@ -102,6 +104,8 @@ export interface TaxInvoice {
   taxableTotal: number;
   grandTotal: number;
   quantityTotal: number;
+  isRoundOff?: boolean;
+  roundOffAmount?: number;
 
   createdBy: TaxInvoiceUserRef;
   createdAt: string;
@@ -120,7 +124,7 @@ export interface TaxInvoicesListResponse {
 
 export type TaxInvoicePayload = Omit<
   TaxInvoice,
-  '_id' | 'createdBy' | 'createdAt' | 'updatedAt' | 'taxableTotal' | 'gstAmount' | 'igstAmount' | 'grandTotal' | 'quantityTotal'
+  '_id' | 'createdBy' | 'createdAt' | 'updatedAt' | 'taxableTotal' | 'gstAmount' | 'igstAmount' | 'grandTotal' | 'quantityTotal' | 'roundOffAmount'
 > & {
   leadId?: string | null;
   invoiceDate: string;
