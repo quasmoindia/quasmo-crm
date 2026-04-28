@@ -1,7 +1,7 @@
 export interface Customer {
   _id: string;
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
   company?: string;
   address?: string;
@@ -13,7 +13,7 @@ export interface Customer {
 
 export interface CreateCustomerPayload {
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
   company?: string;
   address?: string;

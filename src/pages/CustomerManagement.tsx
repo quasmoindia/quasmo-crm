@@ -156,7 +156,7 @@ function EditCustomerModal({
   onClose: () => void;
   onSave: (payload: {
     name: string;
-    phone: string;
+    phone?: string;
     email?: string;
     company?: string;
     address?: string;
@@ -165,7 +165,7 @@ function EditCustomerModal({
   }) => Promise<void>;
 }) {
   const [name, setName] = useState(customer.name);
-  const [phone, setPhone] = useState(customer.phone);
+  const [phone, setPhone] = useState(customer.phone ?? '');
   const [email, setEmail] = useState(customer.email ?? '');
   const [company, setCompany] = useState(customer.company ?? '');
   const [address, setAddress] = useState(customer.address ?? '');
@@ -185,14 +185,14 @@ function EditCustomerModal({
           className="mt-4 space-y-4"
           onSubmit={async (e) => {
             e.preventDefault();
-            if (!name.trim() || !phone.trim()) {
-              alert('Name and phone are required');
+            if (!name.trim()) {
+              alert('Name is required');
               return;
             }
             try {
               await onSave({
                 name: name.trim(),
-                phone: phone.trim(),
+                phone: phone.trim() || undefined,
                 email: email.trim() || undefined,
                 company: company.trim() || undefined,
                 address: address.trim() || undefined,
@@ -206,7 +206,7 @@ function EditCustomerModal({
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
-            <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+            <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
             <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             <Input label="Company" value={company} onChange={(e) => setCompany(e.target.value)} />
             <div className="sm:col-span-2">
