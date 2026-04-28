@@ -22,7 +22,7 @@ export const MODULE_LABELS: Record<string, string> = {
   invoices: 'Tax invoices',
   products: 'Products',
   customers: 'Customers',
-  orders: 'Order Processing',
+  orders: 'Order Management',
   expenses: 'Expenses',
   documents: 'Documents',
 };
@@ -53,7 +53,7 @@ export const NAV_MODULES: NavModule[] = [
   { moduleId: 'customers', label: 'Customers', path: '/dashboard/customers', end: false },
   { moduleId: 'invoices', label: 'Tax invoices', path: '/dashboard/invoices', end: false },
   { moduleId: 'products', label: 'Products', path: '/dashboard/products', end: false },
-  { moduleId: 'orders', label: 'Order Processing', path: '/dashboard/orders', end: false },
+  { moduleId: 'orders', label: 'Order Management', path: '/dashboard/orders', end: false },
   { moduleId: 'complaints', label: 'Complaint management', path: '/dashboard/complaints', end: false },
   { moduleId: 'expenses', label: 'Expenses', path: '/dashboard/expenses', end: false },
   { moduleId: 'documents', label: 'Documents', path: '/dashboard/documents', end: false },

@@ -62,7 +62,7 @@ export const DOCUMENT_MODULE_OPTIONS: { value: DocumentModule; label: string }[]
   { value: 'invoices', label: 'Tax invoices' },
   { value: 'products', label: 'Products' },
   { value: 'customers', label: 'Customers' },
-  { value: 'orders', label: 'Order Processing' },
+  { value: 'orders', label: 'Order Management' },
   { value: 'expenses', label: 'Expenses' },
   { value: 'documents', label: 'Documents' },
   { value: 'other', label: 'Other' },
