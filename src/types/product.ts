@@ -97,6 +97,7 @@ export interface CreateProductPayload {
   currentStock?: number;
   warrantyMonths?: number;
   variants?: ProductVariant[];
+  images?: string[];
 }
 
 export interface UpdateProductPayload extends Partial<CreateProductPayload> {}

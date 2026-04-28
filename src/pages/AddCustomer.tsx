@@ -5,6 +5,18 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { useCreateCustomer } from '../api/customers';
+import { GstinLookupButton, type GstinLookupResponse } from '../components/GstinLookupButton';
+
+function applyGstLookupToCustomerFields(
+  d: GstinLookupResponse,
+  setGstNumber: (v: string) => void,
+  setCompany: (v: string) => void,
+  setAddress: (v: string) => void
+) {
+  if (d.gstin) setGstNumber(d.gstin);
+  if (d.company) setCompany(d.company);
+  if (d.address) setAddress(d.address);
+}
 
 export function AddCustomer() {
   const navigate = useNavigate();
@@ -20,7 +32,15 @@ export function AddCustomer() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await createMutation.mutateAsync({ name, phone, email, company, address, gstNumber, notes });
+      await createMutation.mutateAsync({
+        name: name.trim(),
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        company: company.trim() || undefined,
+        address: address.trim() || undefined,
+        gstNumber: gstNumber.trim() || undefined,
+        notes: notes.trim() || undefined,
+      });
       navigate('/dashboard/customers');
     } catch (err) {
       console.error(err);
@@ -44,14 +64,25 @@ export function AddCustomer() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Name *" value={name} onChange={(e) => setName(e.target.value)} required disabled={createMutation.isPending} />
-            <Input label="Phone *" value={phone} onChange={(e) => setPhone(e.target.value)} required disabled={createMutation.isPending} />
+            <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={createMutation.isPending} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={createMutation.isPending} />
             <Input label="Company" value={company} onChange={(e) => setCompany(e.target.value)} disabled={createMutation.isPending} />
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Input label="GST Number" value={gstNumber} onChange={(e) => setGstNumber(e.target.value)} disabled={createMutation.isPending} />
+          <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/40 p-4">
+            <p className="mb-3 text-sm text-slate-600">
+              Enter GSTIN and use lookup to auto-fill business name and address.
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <Input label="GST Number" value={gstNumber} onChange={(e) => setGstNumber(e.target.value)} disabled={createMutation.isPending} />
+              <GstinLookupButton
+                gstin={gstNumber}
+                disabled={createMutation.isPending || !gstNumber.trim()}
+                onSuccess={(d) => applyGstLookupToCustomerFields(d, setGstNumber, setCompany, setAddress)}
+                fullWidthOnMobile
+              />
+            </div>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-slate-700">Address</label>

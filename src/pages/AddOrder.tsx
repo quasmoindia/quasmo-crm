@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiPlus, FiTrash2, FiSearch } from 'react-icons/fi';
+import { FiArrowLeft, FiPlus, FiTrash2 } from 'react-icons/fi';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { useCreateOrder } from '../api/orders';
 import { useCustomersList } from '../api/customers';
 import { useProductsList } from '../api/products';
@@ -13,7 +14,6 @@ export function AddOrder() {
   const createMutation = useCreateOrder();
 
   const [customerId, setCustomerId] = useState('');
-  const [customerSearch, setCustomerSearch] = useState('');
   const [specificationNotes, setSpecificationNotes] = useState('');
   const [packingInstructions, setPackingInstructions] = useState('');
   
@@ -22,7 +22,7 @@ export function AddOrder() {
   ]);
 
   // Fetch lists for dropdowns
-  const { data: customersData, isLoading: loadingCustomers } = useCustomersList({ search: customerSearch, limit: 20 });
+  const { data: customersData, isLoading: loadingCustomers } = useCustomersList({ limit: 200, page: 1 });
   const customers = customersData?.data ?? [];
 
   const { data: productsData } = useProductsList({ limit: 100 });
@@ -92,46 +92,21 @@ export function AddOrder() {
           </div>
           
           <div className="relative">
-            <div className="mb-2 flex items-center gap-2">
-              <FiSearch className="text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search customers..."
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                className="w-full rounded border-b border-slate-200 bg-transparent px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-            {loadingCustomers && <p className="text-xs text-slate-400">Loading customers...</p>}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-              {customers.map((c) => (
-                <label
-                  key={c._id}
-                  className={`flex cursor-pointer flex-col rounded-lg border p-3 transition-colors ${
-                    customerId === c._id ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600' : 'border-slate-200 hover:border-indigo-300'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-medium text-slate-800">{c.name}</span>
-                    <input
-                      type="radio"
-                      name="customer"
-                      value={c._id}
-                      checked={customerId === c._id}
-                      onChange={(e) => setCustomerId(e.target.value)}
-                      className="mt-1 size-3.5 text-indigo-600 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <span className="mt-1 text-xs text-slate-500">{c.phone}</span>
-                  {c.company && <span className="text-[11px] text-slate-400">{c.company}</span>}
-                </label>
-              ))}
-              {customers.length === 0 && !loadingCustomers && (
-                <p className="col-span-full py-4 text-center text-sm text-slate-500">
-                  No customers found. Try creating a new one.
-                </p>
-              )}
-            </div>
+            <SearchableSelect
+              label="Customer"
+              value={customerId}
+              onChange={setCustomerId}
+              required
+              loading={loadingCustomers}
+              options={customers.map((customer) => ({
+                value: customer._id,
+                label: customer.name,
+                meta: `${customer.phone || 'No phone'}${customer.company ? ` • ${customer.company}` : ''}`,
+              }))}
+              placeholder="Select customer..."
+              searchPlaceholder="Search by name, phone, company..."
+              emptyText="No customers found"
+            />
           </div>
         </Card>
 
@@ -159,20 +134,20 @@ export function AddOrder() {
                 )}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
                   <div className="sm:col-span-3">
-                    <label className="mb-1 block text-sm font-medium text-slate-700">Product *</label>
-                    <select
+                    <SearchableSelect
+                      label="Product"
                       value={item.product}
-                      onChange={(e) => updateItem(index, 'product', e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      onChange={(selected) => updateItem(index, 'product', selected)}
+                      options={products.map((product) => ({
+                        value: product._id,
+                        label: `${product.productCode} - ${product.productName}`,
+                        meta: `Stock: ${product.currentStock ?? 0} ${product.unit}`,
+                      }))}
+                      placeholder="Select a product..."
+                      searchPlaceholder="Search by code, name, brand..."
+                      emptyText="No products found"
                       required
-                    >
-                      <option value="">Select a product...</option>
-                      {products.map(p => (
-                        <option key={p._id} value={p._id}>
-                          {p.productCode} - {p.productName}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
                   <div>
                     <Input

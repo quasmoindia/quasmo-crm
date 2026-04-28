@@ -19,7 +19,7 @@ import { useOrdersList, useUpdateOrder, useUpdateOrderStatus, useDeleteOrder, up
 import { useCurrentUser } from '../api/auth';
 import { useCustomersList } from '../api/customers';
 import { useProductsList } from '../api/products';
-import { useCreateCourier } from '../api/couriers';
+import { useCouriersList, useCreateCourier } from '../api/couriers';
 import { ORDER_STATUS_OPTIONS, type Order, type OrderStatus } from '../types/order';
 
 function StatusBadge({ status }: { status: OrderStatus }) {
@@ -72,6 +72,7 @@ function OrderDetailsModal({
   const updateOrderMutation = useUpdateOrder();
   const updateOrderStatusMutation = useUpdateOrderStatus();
   const createCourierMutation = useCreateCourier();
+  const { data: couriersData, refetch: refetchCouriers } = useCouriersList();
   const { data: customersData } = useCustomersList({ limit: 200 });
   const { data: productsData } = useProductsList({ limit: 200, page: 1 });
   const customers = customersData?.data ?? [];
@@ -91,6 +92,15 @@ function OrderDetailsModal({
       quantity: item.quantity,
       notes: item.notes ?? '',
     }))
+  );
+
+  const findCourierIdByName = (name: string) => {
+    const normalized = name.trim().toLowerCase();
+    if (!normalized) return undefined;
+    return couriersData?.data?.find((courier) => courier.name.trim().toLowerCase() === normalized)?._id;
+  };
+  const courierNameSuggestions = Array.from(
+    new Set((couriersData?.data ?? []).map((courier) => courier.name.trim()).filter(Boolean))
   );
 
   const updateItem = (index: number, field: 'product' | 'quantity' | 'notes', value: string | number) => {
@@ -118,11 +128,26 @@ function OrderDetailsModal({
       let courierId: string | undefined;
       const normalizedCourierName = courierName.trim();
       if (normalizedCourierName) {
-        if (order.courier?.name?.trim() === normalizedCourierName && order.courier?._id) {
+        const normalizedCurrentCourierName = order.courier?.name?.trim().toLowerCase();
+        if (normalizedCurrentCourierName === normalizedCourierName.toLowerCase() && order.courier?._id) {
           courierId = order.courier._id;
         } else {
-          const createdCourier = await createCourierMutation.mutateAsync({ name: normalizedCourierName });
-          courierId = createdCourier._id;
+          courierId = findCourierIdByName(normalizedCourierName);
+          if (!courierId) {
+            try {
+              const createdCourier = await createCourierMutation.mutateAsync({ name: normalizedCourierName });
+              courierId = createdCourier._id;
+            } catch (error) {
+              const message = (error as Error).message;
+              if (!message.includes('already exists')) throw error;
+              const latest = await refetchCouriers();
+              const matchedCourier = latest.data?.data?.find(
+                (courier) => courier.name.trim().toLowerCase() === normalizedCourierName.toLowerCase()
+              );
+              if (!matchedCourier?._id) throw error;
+              courierId = matchedCourier._id;
+            }
+          }
         }
       }
 
@@ -233,8 +258,12 @@ function OrderDetailsModal({
               <div className="space-y-2">
                 {order.items.map((item, idx) => (
                   <div key={idx} className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-sm">
-                    <p className="font-medium text-slate-800">
-                      {item.quantity}x {item.product?.productName || 'Unknown product'} ({item.product?.productCode || '—'})
+                    <p className="font-medium text-slate-800">{item.product?.productName || 'Unknown product'}</p>
+                    <p className="mt-1 text-slate-600">
+                      <span className="font-medium text-slate-700">Quantity:</span> {item.quantity}
+                    </p>
+                    <p className="text-slate-600">
+                      <span className="font-medium text-slate-700">Product Code:</span> {item.product?.productCode || '—'}
                     </p>
                     <p className="mt-1 text-slate-600">{item.notes?.trim() || 'No item notes'}</p>
                   </div>
@@ -259,21 +288,31 @@ function OrderDetailsModal({
 
             {reachedPacking && (
               <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-amber-800">Packing Details</h3>
+                <h3 className="mb-2 text-sm font-semibold text-amber-800">Packing Details</h3>
+                <p className="text-sm text-slate-700"><span className="font-medium">Packing Instructions:</span> {order.packingInstructions?.trim() || '—'}</p>
+              </div>
+            )}
+
+            {reachedPacking && (
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-indigo-800">Shipping Label</h3>
+                    <p className="mt-1 text-xs text-slate-600">Generate printable labels for packed order items.</p>
+                  </div>
                   <Button type="button" variant="outline" onClick={() => onGenerateLabel(order)}>
                     <FiFileText className="mr-1.5 inline size-4" />
                     Generate Label
                   </Button>
                 </div>
-                <p className="text-sm text-slate-700"><span className="font-medium">Courier:</span> {order.courier?.name || '—'}</p>
-                <p className="text-sm text-slate-700"><span className="font-medium">Tracking Number:</span> {order.trackingNumber || '—'}</p>
               </div>
             )}
 
             {reachedDispatch && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
-                <h3 className="mb-2 text-sm font-semibold text-emerald-800">Dispatch Documents</h3>
+                <h3 className="mb-2 text-sm font-semibold text-emerald-800">Dispatch Details</h3>
+                <p className="text-sm text-slate-700"><span className="font-medium">Courier:</span> {order.courier?.name || '—'}</p>
+                <p className="text-sm text-slate-700"><span className="font-medium">Tracking Number:</span> {order.trackingNumber || '—'}</p>
                 <p className="mb-2 text-sm text-slate-700"><span className="font-medium">Dispatch Date:</span> {order.dispatchDate ? formatDate(order.dispatchDate) : '—'}</p>
                 {order.documents?.length ? (
                   <div className="flex flex-wrap gap-2">
@@ -411,7 +450,13 @@ function OrderDetailsModal({
                     value={courierName}
                     onChange={(e) => setCourierName(e.target.value)}
                     placeholder="Courier provider name"
+                    list="order-details-courier-suggestions"
                   />
+                  <datalist id="order-details-courier-suggestions">
+                    {courierNameSuggestions.map((name) => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
                   <Input
                     label="Tracking Number"
                     value={trackingNumber}
@@ -475,6 +520,7 @@ function StageUpdateModal({
 }) {
   const updateMutation = useUpdateOrderStatus();
   const createCourierMutation = useCreateCourier();
+  const { data: couriersData, refetch: refetchCouriers } = useCouriersList();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [qualityCheckNotes, setQualityCheckNotes] = useState(order.qualityCheckNotes ?? '');
   const [packingInstructions, setPackingInstructions] = useState(order.packingInstructions ?? '');
@@ -483,6 +529,15 @@ function StageUpdateModal({
   const [dispatchDate, setDispatchDate] = useState(order.dispatchDate ? new Date(order.dispatchDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
   const [files, setFiles] = useState<File[]>([]);
   const [uploadingDocs, setUploadingDocs] = useState(false);
+
+  const findCourierIdByName = (name: string) => {
+    const normalized = name.trim().toLowerCase();
+    if (!normalized) return undefined;
+    return couriersData?.data?.find((courier) => courier.name.trim().toLowerCase() === normalized)?._id;
+  };
+  const courierNameSuggestions = Array.from(
+    new Set((couriersData?.data ?? []).map((courier) => courier.name.trim()).filter(Boolean))
+  );
 
   const isDispatch = targetStatus === 'dispatch';
   const isReady = targetStatus === 'ready';
@@ -497,11 +552,27 @@ function StageUpdateModal({
     try {
       let courierIdForDispatch = order.courier?._id;
       if (isDispatch) {
-        if (!courierIdForDispatch || order.courier?.name !== courierName.trim()) {
-          const created = await createCourierMutation.mutateAsync({
-            name: courierName.trim(),
-          });
-          courierIdForDispatch = created._id;
+        const normalizedCourierName = courierName.trim();
+        const normalizedCurrentCourierName = order.courier?.name?.trim().toLowerCase();
+        if (!courierIdForDispatch || normalizedCurrentCourierName !== normalizedCourierName.toLowerCase()) {
+          courierIdForDispatch = findCourierIdByName(normalizedCourierName);
+          if (!courierIdForDispatch) {
+            try {
+              const created = await createCourierMutation.mutateAsync({
+                name: normalizedCourierName,
+              });
+              courierIdForDispatch = created._id;
+            } catch (error) {
+              const message = (error as Error).message;
+              if (!message.includes('already exists')) throw error;
+              const latest = await refetchCouriers();
+              const matchedCourier = latest.data?.data?.find(
+                (courier) => courier.name.trim().toLowerCase() === normalizedCourierName.toLowerCase()
+              );
+              if (!matchedCourier?._id) throw error;
+              courierIdForDispatch = matchedCourier._id;
+            }
+          }
         }
       }
       if (files.length > 0) {
@@ -573,7 +644,18 @@ function StageUpdateModal({
 
           {isDispatch && (
             <>
-              <Input label="Courier Name *" value={courierName} onChange={(e) => setCourierName(e.target.value)} required />
+              <Input
+                label="Courier Name *"
+                value={courierName}
+                onChange={(e) => setCourierName(e.target.value)}
+                required
+                list="stage-courier-suggestions"
+              />
+              <datalist id="stage-courier-suggestions">
+                {courierNameSuggestions.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
               <Input label="Tracking number" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="AWB123456789" />
               <Input label="Dispatch Date *" type="date" value={dispatchDate} onChange={(e) => setDispatchDate(e.target.value)} required />
             </>
@@ -588,14 +670,43 @@ function StageUpdateModal({
                   multiple
                   className="hidden"
                   onChange={(e) => {
-                    if (e.target.files) setFiles(Array.from(e.target.files));
+                    if (e.target.files) {
+                      const incoming = Array.from(e.target.files);
+                      setFiles((prev) => {
+                        const key = (f: File) => `${f.name}-${f.size}-${f.lastModified}`;
+                        const existing = new Set(prev.map(key));
+                        const merged = [...prev];
+                        for (const file of incoming) {
+                          if (!existing.has(key(file))) merged.push(file);
+                        }
+                        return merged;
+                      });
+                      e.target.value = '';
+                    }
                   }}
                 />
                 <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
                   <FiUpload className="mr-1.5 inline size-4" /> Upload docs
                 </Button>
-                <span className="text-xs text-slate-500">{files.length > 0 ? `${files.length} file(s) selected` : 'Optional documents before dispatch'}</span>
+                <span className="text-xs text-slate-500">{files.length > 0 ? `${files.length} file(s) selected` : 'Optional documents before dispatch (you can add multiple files)'}</span>
               </div>
+              {files.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {files.map((file, idx) => (
+                    <span key={`${file.name}-${idx}`} className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-xs text-slate-700 ring-1 ring-slate-200">
+                      <span className="max-w-[180px] truncate">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setFiles((prev) => prev.filter((_, i) => i !== idx))}
+                        className="text-slate-400 hover:text-red-600"
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -756,7 +867,7 @@ export function OrderProcessing() {
         .replaceAll("'", '&#39;');
 
     const itemsHtml = order.items
-      .map((i) => `<li>${i.quantity}x ${esc(i.product.productName)} (${esc(i.product.productCode)})${i.notes ? ` - ${esc(i.notes)}` : ''}</li>`)
+      .map((i) => `<li>${i.quantity}x ${esc(i.product.productName)}</li>`)
       .join('');
 
     const website = 'https://www.quasmoindianmicroscope.com/';
@@ -773,7 +884,7 @@ export function OrderProcessing() {
           </header>
           <div class="section">
             <div class="title">Ship To</div>
-            <div class="content">${esc(order.customer.name)}<br/>${esc(order.customer.company || '')}<br/>${esc(order.customer.address || 'No address provided')}<br/>Ph: ${esc(order.customer.phone || '—')}</div>
+            <div class="content">${esc(order.customer.name)}<br/>Ph: ${esc(order.customer.phone || '—')}</div>
           </div>
           <div class="section">
             <div class="title">Package Contents</div>
@@ -781,11 +892,6 @@ export function OrderProcessing() {
               ${itemsHtml}
             </ul>
           </div>
-          <div class="section">
-            <div class="title">Courier</div>
-            <div class="content">${esc(order.courier?.name || 'Not assigned')} - ${esc(order.trackingNumber || 'No tracking ID')}</div>
-          </div>
-          ${order.packingInstructions ? `<div class="section"><div class="title">Packing Instructions</div><div class="content small">${esc(order.packingInstructions)}</div></div>` : ''}
           <div class="footer">
             <img src="${qrUrl}" alt="QR code" class="qr" />
             <div class="company">

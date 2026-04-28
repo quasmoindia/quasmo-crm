@@ -199,7 +199,7 @@ export function EditProduct() {
           currentStock: parseInt(currentStock, 10) || 0,
           warrantyMonths: parseInt(warrantyMonths, 10) || 12,
           variants: variants.filter((v) => v.attribute.trim() && v.value.trim()),
-          // Note: we'd ideally also update existingImages array via the backend here if they were removed
+          images: existingImages,
         },
       });
 
