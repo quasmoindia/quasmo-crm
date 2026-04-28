@@ -1046,7 +1046,7 @@ export function OrderProcessing() {
       <div className="mb-6 rounded-2xl border border-slate-200 bg-linear-to-r from-white via-slate-50 to-indigo-50/70 p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Order Processing</h1>
+            <h1 className="text-2xl font-bold text-slate-800">Order Management</h1>
             <p className="mt-1 text-sm text-slate-500">Track every order from QC to dispatch with list or kanban workflow.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
