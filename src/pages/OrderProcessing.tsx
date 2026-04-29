@@ -884,7 +884,11 @@ export function OrderProcessing() {
           </header>
           <div class="section">
             <div class="title">Ship To</div>
-            <div class="content">${esc(order.customer.name)}<br/>Ph: ${esc(order.customer.phone || '—')}</div>
+            <div class="content">
+              ${esc(order.customer.name)}<br/>
+              Ph: ${esc(order.customer.phone || '—')}<br/>
+              Address: ${esc(order.customer.address || '—')}
+            </div>
           </div>
           <div class="section">
             <div class="title">Package Contents</div>
