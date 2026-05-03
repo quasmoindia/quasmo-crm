@@ -34,7 +34,7 @@ import {
   downloadTaxInvoicePdfApi,
 } from '../api/taxInvoices';
 import { useConvertLeadToCustomer } from '../api/customers';
-import type { Lead, LeadStatus, LeadSource, CreateLeadPayload } from '../types/lead';
+import type { Lead, LeadStatus, LeadSource, CreateLeadPayload, UpdateLeadPayload } from '../types/lead';
 import { LEAD_STATUS_OPTIONS, LEAD_SOURCE_OPTIONS, LEAD_STATUS_STYLES } from '../types/lead';
 import type { TaxInvoice } from '../types/taxInvoice';
 import { DOCUMENT_KIND_OPTIONS } from '../types/taxDocumentKind';
@@ -818,14 +818,19 @@ function CreateLeadModal({
   const [notes, setNotes] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const { data: usersData } = useAssignableUsers();
+  const { data: usersData } = useAssignableUsers({ enabled: !!isAdmin });
   const users = usersData?.data ?? [];
+  const myUserId = auth?.user?.id;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     if (!name.trim()) {
       setError('Name is required');
+      return;
+    }
+    if (!isAdmin && !myUserId) {
+      setError('Could not resolve your user. Please refresh and try again.');
       return;
     }
     const payload: CreateLeadPayload = {
@@ -838,7 +843,7 @@ function CreateLeadModal({
       status,
       source: (source.trim() || undefined) as LeadSource | undefined,
       notes: notes.trim() || undefined,
-      assignedTo: assignedTo || undefined,
+      assignedTo: isAdmin ? assignedTo || undefined : myUserId,
     };
     mutation.mutate(payload, { onSuccess, onError: (err: Error) => setError(err.message) });
   }
@@ -1049,7 +1054,7 @@ function CreateLeadModal({
                       ))}
                     </select>
                   </div>
-                  {isAdmin && (
+                  {isAdmin ? (
                     <div className="sm:col-span-2 lg:col-span-1">
                       <label className="mb-1.5 block text-sm font-medium text-slate-700">Assign to</label>
                       <select
@@ -1065,6 +1070,13 @@ function CreateLeadModal({
                           </option>
                         ))}
                       </select>
+                    </div>
+                  ) : (
+                    <div className="sm:col-span-2 lg:col-span-1 flex flex-col justify-end">
+                      <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                        <span className="font-medium text-slate-800">Assignment:</span> This lead will be assigned to{' '}
+                        <span className="text-slate-900">you</span> (the creator).
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1241,7 +1253,7 @@ function LeadDetailModal({
   const updateMutation = useUpdateLead();
   const convertMutation = useConvertLeadToCustomer();
   const uploadAttachmentsMutation = useUploadLeadAttachments(id);
-  const { data: usersData } = useAssignableUsers();
+  const { data: usersData } = useAssignableUsers({ enabled: !!isAdmin });
   const users = usersData?.data ?? [];
 
   const [editing, setEditing] = useState(false);
@@ -1305,21 +1317,19 @@ function LeadDetailModal({
         await uploadAttachmentsMutation.mutateAsync(pendingAttachmentFiles);
         setPendingAttachmentFiles([]);
       }
-      await updateMutation.mutateAsync({
-        id,
-        payload: {
-          name,
-          phone,
-          email: email || undefined,
-          company: company || undefined,
-          address: address.trim(),
-          gstNumber: gstNumber.trim() || undefined,
-          status,
-          source: (source || undefined) as LeadSource | undefined,
-          notes: notes || undefined,
-          assignedTo: assignedTo || null,
-        },
-      });
+      const payload: UpdateLeadPayload = {
+        name,
+        phone,
+        email: email || undefined,
+        company: company || undefined,
+        address: address.trim(),
+        gstNumber: gstNumber.trim() || undefined,
+        status,
+        source: (source || undefined) as LeadSource | undefined,
+        notes: notes || undefined,
+      };
+      if (isAdmin) payload.assignedTo = assignedTo || null;
+      await updateMutation.mutateAsync({ id, payload });
       setEditing(false);
     } catch {
       /* errors via mutation isError */
