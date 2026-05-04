@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiPlus, FiTrash2 } from 'react-icons/fi';
 import { Button } from '../components/Button';
@@ -25,8 +25,18 @@ export function AddOrder() {
   const { data: customersData, isLoading: loadingCustomers } = useCustomersList({ limit: 200, page: 1 });
   const customers = customersData?.data ?? [];
 
-  const { data: productsData } = useProductsList({ limit: 100 });
+  const { data: productsData, isLoading: loadingProducts } = useProductsList({ limit: 500, page: 1 });
   const products = productsData?.data ?? [];
+
+  const productById = useMemo(() => new Map(products.map((p) => [p._id, p])), [products]);
+
+  function quantityForProductExcludingRow(excludeIndex: number, productId: string): number {
+    return items.reduce((sum, row, i) => {
+      if (i === excludeIndex || row.product !== productId) return sum;
+      const q = row.quantity;
+      return sum + (Number.isFinite(q) && q > 0 ? q : 0);
+    }, 0);
+  }
 
   const handleAddItem = () => {
     setItems([...items, { product: '', quantity: 1, notes: '' }]);
@@ -53,6 +63,21 @@ export function AddOrder() {
         notes: item.notes.trim() || undefined,
       }));
     if (validItems.length === 0) return alert('Please add at least one valid product.');
+
+    for (let i = 0; i < items.length; i++) {
+      const row = items[i];
+      if (!row.product || !(row.quantity > 0)) continue;
+      const p = productById.get(row.product);
+      if (!p) continue;
+      const reservedElsewhere = quantityForProductExcludingRow(i, row.product);
+      const remaining = (p.currentStock ?? 0) - reservedElsewhere;
+      if (row.quantity > remaining) {
+        alert(
+          `Line ${i + 1}: quantity exceeds available stock (${remaining} ${p.unit} available for this line).`
+        );
+        return;
+      }
+    }
 
     try {
       await createMutation.mutateAsync({
@@ -121,7 +146,18 @@ export function AddOrder() {
           </div>
 
           <div className="space-y-4">
-            {items.map((item, index) => (
+            {items.map((item, index) => {
+              const selectedProduct = item.product ? productById.get(item.product) : undefined;
+              const warehouseStock = selectedProduct?.currentStock ?? 0;
+              const unit = selectedProduct?.unit ?? 'Nos';
+              const qtyReservedElsewhere = item.product
+                ? quantityForProductExcludingRow(index, item.product)
+                : 0;
+              const remainingForThisLine = Math.max(0, warehouseStock - qtyReservedElsewhere);
+              const lineQty = Number.isFinite(item.quantity) && item.quantity > 0 ? item.quantity : 0;
+              const exceedsStock = Boolean(selectedProduct && lineQty > remainingForThisLine);
+
+              return (
               <div key={index} className="relative rounded-lg border border-slate-200 bg-slate-50 p-4">
                 {items.length > 1 && (
                   <button
@@ -138,10 +174,11 @@ export function AddOrder() {
                       label="Product"
                       value={item.product}
                       onChange={(selected) => updateItem(index, 'product', selected)}
+                      loading={loadingProducts}
                       options={products.map((product) => ({
                         value: product._id,
                         label: `${product.productCode} - ${product.productName}`,
-                        meta: `Stock: ${product.currentStock ?? 0} ${product.unit}`,
+                        meta: `Available: ${product.currentStock ?? 0} ${product.unit}`,
                       }))}
                       placeholder="Select a product..."
                       searchPlaceholder="Search by code, name, brand..."
@@ -154,10 +191,33 @@ export function AddOrder() {
                       label="Quantity *"
                       type="number"
                       min="1"
+                      max={remainingForThisLine > 0 ? remainingForThisLine : undefined}
                       value={item.quantity}
                       onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value, 10))}
                       required
                     />
+                    {selectedProduct && (
+                      <p
+                        className={`mt-1.5 text-xs ${
+                          exceedsStock ? 'font-medium text-red-600' : 'text-slate-600'
+                        }`}
+                      >
+                        Available:{' '}
+                        <span className="font-semibold text-slate-800">{warehouseStock}</span> {unit}
+                        {qtyReservedElsewhere > 0 && (
+                          <>
+                            {' '}
+                            · <span className="text-slate-700">{remainingForThisLine}</span> left for
+                            this line ({qtyReservedElsewhere} in other rows)
+                          </>
+                        )}
+                        {exceedsStock && (
+                          <span className="block pt-0.5">
+                            Reduce quantity to {remainingForThisLine} or less.
+                          </span>
+                        )}
+                      </p>
+                    )}
                   </div>
                   <div className="sm:col-span-4">
                     <label className="mb-1 block text-sm font-medium text-slate-700">Product Notes</label>
@@ -171,7 +231,8 @@ export function AddOrder() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
 

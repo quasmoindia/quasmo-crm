@@ -62,7 +62,7 @@ export function listAssignableUsersApi() {
   return get<{ data: { _id: string; fullName: string; email?: string }[] }>(`${LEADS_BASE}/users`);
 }
 
-/** Response from GET /leads/gst-lookup (optional; requires server GSTIN_CHECK_API_KEY). */
+/** Response from GET /gst-lookup (optional; requires server GSTIN_CHECK_API_KEY). */
 export type GstinLookupResponse = {
   configured: boolean;
   gstin: string;
@@ -74,10 +74,12 @@ export type GstinLookupResponse = {
   warning?: string;
 };
 
+const GST_LOOKUP_PATH = '/gst-lookup';
+
 export function lookupGstinApi(gstin: string) {
   const q = new URLSearchParams();
   q.set('gstin', gstin.trim());
-  return get<GstinLookupResponse>(`${LEADS_BASE}/gst-lookup?${q.toString()}`);
+  return get<GstinLookupResponse>(`${GST_LOOKUP_PATH}?${q.toString()}`);
 }
 
 export function createLeadApi(payload: CreateLeadPayload) {
@@ -186,10 +188,11 @@ export function useLead(id: string | null) {
   });
 }
 
-export function useAssignableUsers() {
+export function useAssignableUsers(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...leadsQueryKey, 'users'],
     queryFn: listAssignableUsersApi,
+    enabled: options?.enabled ?? true,
   });
 }
 

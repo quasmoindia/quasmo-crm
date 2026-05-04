@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiPlus, FiFileText, FiUpload, FiDownload, FiList, FiGrid, FiSearch, FiEye, FiArrowRightCircle } from 'react-icons/fi';
 import {
@@ -15,7 +15,14 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
-import { useOrdersList, useUpdateOrder, useUpdateOrderStatus, useDeleteOrder, uploadOrderDocumentsApi } from '../api/orders';
+import {
+  useOrdersList,
+  useUpdateOrder,
+  useUpdateOrderStatus,
+  useDeleteOrder,
+  useSaveShippingLabelSnapshot,
+  uploadOrderDocumentsApi,
+} from '../api/orders';
 import { useCurrentUser } from '../api/auth';
 import { useCustomersList } from '../api/customers';
 import { useProductsList } from '../api/products';
@@ -35,6 +42,289 @@ function StatusBadge({ status }: { status: OrderStatus }) {
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function escHtmlForLabel(v: string) {
+  return v
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+type ShippingLabelPrintArgs = {
+  orderNumber: string;
+  shipToName: string;
+  shipToPhone: string;
+  shipToAddress: string;
+  labelCount: number;
+  packageLines: { quantity: number; productName: string }[];
+};
+
+function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert('Please allow popups to print label.');
+    return;
+  }
+
+  const itemsHtml = args.packageLines
+    .map((i) => `<li>${i.quantity}x ${escHtmlForLabel(i.productName)}</li>`)
+    .join('');
+
+  const website = 'https://www.quasmoindianmicroscope.com/';
+  const qrValue = encodeURIComponent(`${website}?order=${encodeURIComponent(args.orderNumber)}`);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${qrValue}`;
+
+  const labelsHtml = Array.from({ length: args.labelCount }, (_, idx) => {
+    const labelNo = `${idx + 1}/${args.labelCount}`;
+    return `
+        <section class="label">
+          <header class="top">
+            <h1>ORDER: ${escHtmlForLabel(args.orderNumber)}</h1>
+            <span class="count">Label ${labelNo}</span>
+          </header>
+          <div class="section">
+            <div class="title">Ship To</div>
+            <div class="content">
+              ${escHtmlForLabel(args.shipToName)}<br/>
+              Ph: ${escHtmlForLabel(args.shipToPhone || '—')}<br/>
+              Address: ${escHtmlForLabel(args.shipToAddress || '—')}
+            </div>
+          </div>
+          <div class="section">
+            <div class="title">Package Contents</div>
+            <ul class="items">
+              ${itemsHtml}
+            </ul>
+          </div>
+          <div class="footer">
+            <img src="${qrUrl}" alt="QR code" class="qr" />
+            <div class="company">
+              <p class="name">M/s Quality Scientific and Mechanical Works</p>
+              <p># 84,HSIDC, Industrial Area, Ambala cantt-133001</p>
+              <p>Mob: +91 8926666632</p>
+              <p>Toll Free: 1800 419 4979</p>
+              <p>Website: ${website}</p>
+            </div>
+          </div>
+        </section>
+      `;
+  }).join('');
+
+  const html = `
+      <html>
+        <head>
+          <title>Label - ${escHtmlForLabel(args.orderNumber)}</title>
+          <style>
+            @page { size: A4 portrait; margin: 8mm; }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #fff; }
+            .sheet {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 6mm;
+              width: 100%;
+              align-content: start;
+            }
+            .label {
+              border: 1.5px solid #000;
+              width: 100%;
+              min-height: 126mm;
+              padding: 3mm;
+              border-radius: 2mm;
+              break-inside: avoid;
+              page-break-inside: avoid;
+              overflow: hidden;
+            }
+            .top { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px; }
+            h1 { margin: 0; font-size: 22px; }
+            .count { font-size: 12px; font-weight: 700; }
+            .section { margin-bottom: 10px; }
+            .title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #444; margin-bottom: 3px; letter-spacing: 0.04em; }
+            .content { font-size: 14px; font-weight: 700; line-height: 1.35; }
+            .items { margin: 0; padding-left: 18px; font-size: 13px; font-weight: 700; }
+            .footer { margin-top: 10px; border-top: 1px dashed #777; padding-top: 8px; display: flex; gap: 8px; align-items: flex-start; }
+            .qr { width: 92px; height: 92px; border: 1px solid #bbb; }
+            .company { font-size: 11px; line-height: 1.3; font-weight: 600; }
+            .company p { margin: 0 0 2px 0; }
+            .company .name { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+            @media print {
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .sheet { gap: 5mm; }
+              .label { min-height: 124mm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="sheet">
+            ${labelsHtml}
+          </div>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `;
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
+function ShippingLabelModal({
+  order,
+  onClose,
+  onSaved,
+}: {
+  order: Order;
+  onClose: () => void;
+  onSaved: (updated: Order) => void;
+}) {
+  const saveMutation = useSaveShippingLabelSnapshot();
+  const snap = order.shippingLabelSnapshot;
+  const [shipToName, setShipToName] = useState(snap?.shipToName ?? order.customer?.name ?? '');
+  const [shipToPhone, setShipToPhone] = useState(snap?.shipToPhone ?? order.customer?.phone ?? '');
+  const [shipToAddress, setShipToAddress] = useState(snap?.shipToAddress ?? order.customer?.address ?? '');
+  const [labelCount, setLabelCount] = useState(String(snap?.labelCount ?? 1));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const s = order.shippingLabelSnapshot;
+    setShipToName(s?.shipToName ?? order.customer?.name ?? '');
+    setShipToPhone(s?.shipToPhone ?? order.customer?.phone ?? '');
+    setShipToAddress(s?.shipToAddress ?? order.customer?.address ?? '');
+    setLabelCount(String(s?.labelCount ?? 1));
+    setError(null);
+  }, [order._id, order.shippingLabelSnapshot?.savedAt]);
+
+  async function handleSaveAndPrint() {
+    setError(null);
+    if (!shipToName.trim()) {
+      setError('Ship-to name is required.');
+      return;
+    }
+    const n = Number.parseInt(labelCount, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 99) {
+      setError('Number of labels must be between 1 and 99.');
+      return;
+    }
+    try {
+      const updated = await saveMutation.mutateAsync({
+        id: order._id,
+        payload: {
+          shipToName: shipToName.trim(),
+          shipToPhone: shipToPhone.trim(),
+          shipToAddress: shipToAddress.trim(),
+          labelCount: n,
+        },
+      });
+      const s = updated.shippingLabelSnapshot;
+      if (!s) {
+        setError('Saved but label data was missing in the response.');
+        return;
+      }
+      openShippingLabelPrintWindow({
+        orderNumber: updated.orderNumber,
+        shipToName: s.shipToName,
+        shipToPhone: s.shipToPhone,
+        shipToAddress: s.shipToAddress,
+        labelCount: s.labelCount,
+        packageLines: s.packageLines.map((l) => ({ quantity: l.quantity, productName: l.productName })),
+      });
+      onSaved(updated);
+    } catch (e) {
+      setError((e as Error).message ?? 'Failed to save label details');
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/50 p-0 sm:items-center sm:p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="shipping-label-title"
+    >
+      <div
+        className="flex max-h-[min(100dvh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:max-h-[90vh] sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
+          <h2 id="shipping-label-title" className="text-lg font-semibold text-slate-900">
+            Shipping label
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Review and edit what will appear on the label, then save and print. Details are stored on the order for later
+            reference.
+          </p>
+          <p className="mt-2 font-mono text-xs text-slate-600">Order {order.orderNumber}</p>
+        </div>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+          {error && (
+            <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+              {error}
+            </div>
+          )}
+          <Input
+            label="Ship-to name *"
+            value={shipToName}
+            onChange={(e) => setShipToName(e.target.value)}
+            disabled={saveMutation.isPending}
+            required
+          />
+          <Input
+            label="Phone"
+            type="tel"
+            value={shipToPhone}
+            onChange={(e) => setShipToPhone(e.target.value)}
+            disabled={saveMutation.isPending}
+          />
+          <div>
+            <label htmlFor="ship-to-address" className="mb-1 block text-sm font-medium text-slate-700">
+              Address
+            </label>
+            <textarea
+              id="ship-to-address"
+              value={shipToAddress}
+              onChange={(e) => setShipToAddress(e.target.value)}
+              disabled={saveMutation.isPending}
+              rows={4}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              placeholder="Street, city, state, PIN…"
+            />
+          </div>
+          <Input
+            label="Number of labels *"
+            type="number"
+            min={1}
+            max={99}
+            value={labelCount}
+            onChange={(e) => setLabelCount(e.target.value)}
+            disabled={saveMutation.isPending}
+            required
+          />
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Package contents (on label)</p>
+            <ul className="mt-2 list-inside list-disc text-sm text-slate-800">
+              {order.items.map((item, idx) => (
+                <li key={idx}>
+                  {item.quantity}× {item.product?.productName ?? 'Product'}{' '}
+                  {item.product?.productCode ? <span className="text-slate-500">({item.product.productCode})</span> : null}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-slate-500">Lines match the current order. Edit the order if items change.</p>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50/90 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onClose} disabled={saveMutation.isPending}>
+            Cancel
+          </Button>
+          <Button type="button" className="w-full sm:w-auto" loading={saveMutation.isPending} onClick={() => void handleSaveAndPrint()}>
+            Save &amp; print label
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 type ViewMode = 'list' | 'kanban';
@@ -62,11 +352,11 @@ function statusRank(status: OrderStatus) {
 
 function OrderDetailsModal({
   order,
-  onGenerateLabel,
+  onOpenShippingLabel,
   onClose,
 }: {
   order: Order;
-  onGenerateLabel: (order: Order) => void;
+  onOpenShippingLabel: (order: Order) => void;
   onClose: () => void;
 }) {
   const updateOrderMutation = useUpdateOrder();
@@ -294,16 +584,57 @@ function OrderDetailsModal({
             )}
 
             {reachedPacking && (
-              <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-indigo-800">Shipping Label</h3>
-                    <p className="mt-1 text-xs text-slate-600">Generate printable labels for packed order items.</p>
+              <div className="space-y-3">
+                {order.shippingLabelSnapshot && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h3 className="text-sm font-semibold text-slate-800">Last generated shipping label</h3>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Saved {formatDate(order.shippingLabelSnapshot.savedAt)} — what was printed is stored below.
+                    </p>
+                    <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                      <div>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Ship-to name</dt>
+                        <dd className="font-medium text-slate-900">{order.shippingLabelSnapshot.shipToName}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Phone</dt>
+                        <dd className="text-slate-800">{order.shippingLabelSnapshot.shipToPhone || '—'}</dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Address</dt>
+                        <dd className="whitespace-pre-wrap text-slate-800">{order.shippingLabelSnapshot.shipToAddress || '—'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Labels printed</dt>
+                        <dd className="text-slate-800">{order.shippingLabelSnapshot.labelCount}</dd>
+                      </div>
+                    </dl>
+                    <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/80 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Package lines on label</p>
+                      <ul className="mt-1.5 list-inside list-disc text-sm text-slate-800">
+                        {order.shippingLabelSnapshot.packageLines.map((line, idx) => (
+                          <li key={idx}>
+                            {line.quantity}× {line.productName}
+                            {line.productCode ? <span className="text-slate-500"> ({line.productCode})</span> : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
-                  <Button type="button" variant="outline" onClick={() => onGenerateLabel(order)}>
-                    <FiFileText className="mr-1.5 inline size-4" />
-                    Generate Label
-                  </Button>
+                )}
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-indigo-800">Shipping Label</h3>
+                      <p className="mt-1 text-xs text-slate-600">
+                        Review ship-to details and label count, then save and print. Nothing prints until you confirm.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" className="shrink-0" onClick={() => onOpenShippingLabel(order)}>
+                      <FiFileText className="mr-1.5 inline size-4" />
+                      {order.shippingLabelSnapshot ? 'Prepare / re-print label' : 'Prepare shipping label'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
@@ -846,125 +1177,14 @@ export function OrderProcessing() {
     })
   );
 
-  const handleGenerateLabel = (order: Order) => {
-    const input = window.prompt('How many labels to generate?', '1');
-    if (input === null) return;
-    const labelCount = Number.parseInt(input, 10);
-    if (!Number.isFinite(labelCount) || labelCount <= 0) {
-      alert('Please enter a valid number of labels.');
-      return;
+  const [labelModalOrder, setLabelModalOrder] = useState<Order | null>(null);
+
+  const handleShippingLabelSaved = (updated: Order) => {
+    setLabelModalOrder(null);
+    if (detailModalOrder?._id === updated._id) {
+      setDetailModalOrder(updated);
     }
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return alert('Please allow popups to print label.');
-
-    const esc = (v: string) =>
-      v
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-
-    const itemsHtml = order.items
-      .map((i) => `<li>${i.quantity}x ${esc(i.product.productName)}</li>`)
-      .join('');
-
-    const website = 'https://www.quasmoindianmicroscope.com/';
-    const qrValue = encodeURIComponent(`${website}?order=${encodeURIComponent(order.orderNumber)}`);
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${qrValue}`;
-
-    const labelsHtml = Array.from({ length: labelCount }, (_, idx) => {
-      const labelNo = `${idx + 1}/${labelCount}`;
-      return `
-        <section class="label">
-          <header class="top">
-            <h1>ORDER: ${esc(order.orderNumber)}</h1>
-            <span class="count">Label ${labelNo}</span>
-          </header>
-          <div class="section">
-            <div class="title">Ship To</div>
-            <div class="content">
-              ${esc(order.customer.name)}<br/>
-              Ph: ${esc(order.customer.phone || '—')}<br/>
-              Address: ${esc(order.customer.address || '—')}
-            </div>
-          </div>
-          <div class="section">
-            <div class="title">Package Contents</div>
-            <ul class="items">
-              ${itemsHtml}
-            </ul>
-          </div>
-          <div class="footer">
-            <img src="${qrUrl}" alt="QR code" class="qr" />
-            <div class="company">
-              <p class="name">M/s Quality Scientific and Mechanical Works</p>
-              <p># 84,HSIDC, Industrial Area, Ambala cantt-133001</p>
-              <p>Mob: +91 8926666632</p>
-              <p>Toll Free: 1800 419 4979</p>
-              <p>Website: ${website}</p>
-            </div>
-          </div>
-        </section>
-      `;
-    }).join('');
-
-    const html = `
-      <html>
-        <head>
-          <title>Label - ${order.orderNumber}</title>
-          <style>
-            @page { size: A4 portrait; margin: 8mm; }
-            * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #fff; }
-            .sheet {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 6mm;
-              width: 100%;
-              align-content: start;
-            }
-            .label {
-              border: 1.5px solid #000;
-              width: 100%;
-              min-height: 126mm;
-              padding: 3mm;
-              border-radius: 2mm;
-              break-inside: avoid;
-              page-break-inside: avoid;
-              overflow: hidden;
-            }
-            .top { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px; }
-            h1 { margin: 0; font-size: 22px; }
-            .count { font-size: 12px; font-weight: 700; }
-            .section { margin-bottom: 10px; }
-            .title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #444; margin-bottom: 3px; letter-spacing: 0.04em; }
-            .content { font-size: 14px; font-weight: 700; line-height: 1.35; }
-            .content.small { font-size: 12px; font-weight: 600; }
-            .items { margin: 0; padding-left: 18px; font-size: 13px; font-weight: 700; }
-            .footer { margin-top: 10px; border-top: 1px dashed #777; padding-top: 8px; display: flex; gap: 8px; align-items: flex-start; }
-            .qr { width: 92px; height: 92px; border: 1px solid #bbb; }
-            .company { font-size: 11px; line-height: 1.3; font-weight: 600; }
-            .company p { margin: 0 0 2px 0; }
-            .company .name { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
-            @media print {
-              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              .sheet { gap: 5mm; }
-              .label { min-height: 124mm; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="sheet">
-            ${labelsHtml}
-          </div>
-          <script>window.print();</script>
-        </body>
-      </html>
-    `;
-    printWindow.document.write(html);
-    printWindow.document.close();
+    void refetch();
   };
 
   const orders = data?.data ?? [];
@@ -1210,7 +1430,23 @@ export function OrderProcessing() {
         )}
       </Card>
 
-      {detailModalOrder && <OrderDetailsModal order={detailModalOrder} onGenerateLabel={handleGenerateLabel} onClose={() => { setDetailModalOrder(null); refetch(); }} />}
+      {detailModalOrder && (
+        <OrderDetailsModal
+          order={detailModalOrder}
+          onOpenShippingLabel={(o) => setLabelModalOrder(o)}
+          onClose={() => {
+            setDetailModalOrder(null);
+            refetch();
+          }}
+        />
+      )}
+      {labelModalOrder && (
+        <ShippingLabelModal
+          order={labelModalOrder}
+          onClose={() => setLabelModalOrder(null)}
+          onSaved={handleShippingLabelSaved}
+        />
+      )}
       {stageModal && (
         <StageUpdateModal
           order={stageModal.order}

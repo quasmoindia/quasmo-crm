@@ -18,6 +18,16 @@ export interface OrderItem {
   notes?: string;
 }
 
+/** Stored when user generates a shipping label (editable ship-to + count; lines from order at save time). */
+export interface ShippingLabelSnapshot {
+  shipToName: string;
+  shipToPhone: string;
+  shipToAddress: string;
+  labelCount: number;
+  packageLines: { quantity: number; productName: string; productCode?: string }[];
+  savedAt: string;
+}
+
 export interface Order {
   _id: string;
   orderNumber: string;
@@ -34,12 +44,21 @@ export interface Order {
   dispatchDate?: string;
   
   documents: string[];
-  
+
+  shippingLabelSnapshot?: ShippingLabelSnapshot;
+
   createdBy: User; // populated
   statusUpdatedBy?: User; // populated
   statusUpdatedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SaveShippingLabelPayload {
+  shipToName: string;
+  shipToPhone: string;
+  shipToAddress: string;
+  labelCount: number;
 }
 
 export interface CreateOrderPayload {
