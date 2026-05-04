@@ -1,7 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { get, post, patch, del } from '../utils/api';
 import { API_BASE_URL } from '../utils/constants';
-import type { Order, CreateOrderPayload, UpdateOrderPayload, OrderStatus } from '../types/order';
+import type {
+  Order,
+  CreateOrderPayload,
+  UpdateOrderPayload,
+  OrderStatus,
+  SaveShippingLabelPayload,
+} from '../types/order';
 
 const ORDERS_BASE = '/orders';
 
@@ -56,6 +62,17 @@ export function useUpdateOrderStatus() {
         dispatchDate?: string;
       };
     }) => patch<Order>(`${ORDERS_BASE}/${id}/status`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
+export function useSaveShippingLabelSnapshot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: SaveShippingLabelPayload }) =>
+      patch<Order>(`${ORDERS_BASE}/${id}/shipping-label`, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
