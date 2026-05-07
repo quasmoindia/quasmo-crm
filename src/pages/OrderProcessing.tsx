@@ -79,8 +79,9 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
 
   const labelsHtml = Array.from({ length: args.labelCount }, (_, idx) => {
     const labelNo = `${idx + 1}/${args.labelCount}`;
+    const pageBreakClass = idx < args.labelCount - 1 ? ' page-break' : '';
     return `
-        <section class="label">
+        <section class="label${pageBreakClass}">
           <header class="top">
             <h1>ORDER: ${escHtmlForLabel(args.orderNumber)}</h1>
             <span class="count">Label ${labelNo}</span>
@@ -118,42 +119,39 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
         <head>
           <title>Label - ${escHtmlForLabel(args.orderNumber)}</title>
           <style>
-            @page { size: A4 portrait; margin: 8mm; }
+            @page { size: 102mm 152mm; margin: 0; }
             * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #fff; }
+            html, body { width: 102mm; height: 152mm; margin: 0; padding: 0; background: #fff; }
+            body { font-family: Arial, sans-serif; }
             .sheet {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 6mm;
-              width: 100%;
-              align-content: start;
+              width: 102mm;
             }
             .label {
               border: 1.5px solid #000;
-              width: 100%;
-              min-height: 126mm;
-              padding: 3mm;
-              border-radius: 2mm;
-              break-inside: avoid;
-              page-break-inside: avoid;
+              width: 102mm;
+              height: 152mm;
+              padding: 4mm;
+              border-radius: 0;
               overflow: hidden;
             }
+            .page-break { page-break-after: always; break-after: page; }
             .top { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px; }
-            h1 { margin: 0; font-size: 22px; }
-            .count { font-size: 12px; font-weight: 700; }
-            .section { margin-bottom: 10px; }
+            h1 { margin: 0; font-size: 18px; }
+            .count { font-size: 11px; font-weight: 700; }
+            .section { margin-bottom: 8px; }
             .title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #444; margin-bottom: 3px; letter-spacing: 0.04em; }
-            .content { font-size: 14px; font-weight: 700; line-height: 1.35; }
-            .items { margin: 0; padding-left: 18px; font-size: 13px; font-weight: 700; }
-            .footer { margin-top: 10px; border-top: 1px dashed #777; padding-top: 8px; display: flex; gap: 8px; align-items: flex-start; }
-            .qr { width: 92px; height: 92px; border: 1px solid #bbb; }
-            .company { font-size: 11px; line-height: 1.3; font-weight: 600; }
+            .content { font-size: 13px; font-weight: 700; line-height: 1.3; }
+            .items { margin: 0; padding-left: 16px; font-size: 12px; font-weight: 700; }
+            .footer { margin-top: 8px; border-top: 1px dashed #777; padding-top: 7px; display: flex; gap: 7px; align-items: flex-start; }
+            .qr { width: 82px; height: 82px; border: 1px solid #bbb; }
+            .company { font-size: 10px; line-height: 1.25; font-weight: 600; }
             .company p { margin: 0 0 2px 0; }
-            .company .name { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+            .company .name { font-size: 11px; font-weight: 700; margin-bottom: 4px; }
             @media print {
               body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              .sheet { gap: 5mm; }
-              .label { min-height: 124mm; }
+              html, body { width: 102mm; height: 152mm; }
+              .sheet { width: 102mm; }
+              .label { width: 102mm; height: 152mm; }
             }
           </style>
         </head>
