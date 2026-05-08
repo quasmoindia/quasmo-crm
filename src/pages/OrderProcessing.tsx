@@ -69,9 +69,20 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
     return;
   }
 
-  const itemsHtml = args.packageLines
-    .map((i) => `<li>${i.quantity}x ${escHtmlForLabel(i.productName)}</li>`)
+  const tableRowsHtml = args.packageLines
+    .map(
+      (i) => `
+        <tr>
+          <td class="qty-cell">${i.quantity}x</td>
+          <td>${escHtmlForLabel(i.productName)}</td>
+        </tr>
+      `
+    )
     .join('');
+
+  const lineCount = args.packageLines.length;
+  const densityClass = lineCount <= 2 ? 'spacious' : lineCount <= 4 ? 'normal' : 'compact';
+  const totalUnits = args.packageLines.reduce((sum, line) => sum + line.quantity, 0);
 
   const website = 'https://www.quasmoindianmicroscope.com/';
   const qrValue = encodeURIComponent(`${website}?order=${encodeURIComponent(args.orderNumber)}`);
@@ -81,7 +92,7 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
     const labelNo = `${idx + 1}/${args.labelCount}`;
     const pageBreakClass = idx < args.labelCount - 1 ? ' page-break' : '';
     return `
-        <section class="label${pageBreakClass}">
+        <section class="label ${densityClass}${pageBreakClass}">
           <header class="top">
             <h1>ORDER: ${escHtmlForLabel(args.orderNumber)}</h1>
             <span class="count">Label ${labelNo}</span>
@@ -96,9 +107,18 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
           </div>
           <div class="section">
             <div class="title">Package Contents</div>
-            <ul class="items">
-              ${itemsHtml}
-            </ul>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th class="qty-cell">Qty</th>
+                  <th>Product</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRowsHtml}
+              </tbody>
+            </table>
+            <p class="meta">Items: ${lineCount} | Units: ${totalUnits}</p>
           </div>
           <div class="footer">
             <img src="${qrUrl}" alt="QR code" class="qr" />
@@ -130,23 +150,47 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
               border: 1.5px solid #000;
               width: 102mm;
               height: 152mm;
-              padding: 4mm;
+              padding: 3mm;
               border-radius: 0;
               overflow: hidden;
+              display: flex;
+              flex-direction: column;
             }
             .page-break { page-break-after: always; break-after: page; }
-            .top { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px; }
-            h1 { margin: 0; font-size: 18px; }
-            .count { font-size: 11px; font-weight: 700; }
-            .section { margin-bottom: 8px; }
-            .title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #444; margin-bottom: 3px; letter-spacing: 0.04em; }
-            .content { font-size: 13px; font-weight: 700; line-height: 1.3; }
-            .items { margin: 0; padding-left: 16px; font-size: 12px; font-weight: 700; }
-            .footer { margin-top: 8px; border-top: 1px dashed #777; padding-top: 7px; display: flex; gap: 7px; align-items: flex-start; }
-            .qr { width: 82px; height: 82px; border: 1px solid #bbb; }
-            .company { font-size: 10px; line-height: 1.25; font-weight: 600; }
+            .top { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
+            h1 { margin: 0; font-size: 20px; line-height: 1.1; }
+            .count { font-size: 13px; font-weight: 700; }
+            .section { margin-bottom: 7px; }
+            .title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #444; margin-bottom: 3px; letter-spacing: 0.04em; }
+            .content { font-size: 15px; font-weight: 700; line-height: 1.28; }
+            .items-table { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1px solid #111; }
+            .items-table th,
+            .items-table td { border: 1px solid #111; padding: 4px 5px; vertical-align: top; }
+            .items-table th { text-align: left; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+            .items-table td { font-size: 14px; font-weight: 700; line-height: 1.25; word-wrap: break-word; }
+            .qty-cell { width: 17mm; white-space: nowrap; text-align: center; }
+            .meta { margin: 4px 0 0 0; font-size: 11px; font-weight: 700; color: #333; }
+            .footer { margin-top: auto; border-top: 1px dashed #777; padding-top: 6px; display: flex; gap: 8px; align-items: flex-start; }
+            .qr { width: 96px; height: 96px; border: 1px solid #bbb; }
+            .company { font-size: 11px; line-height: 1.28; font-weight: 600; }
             .company p { margin: 0 0 2px 0; }
-            .company .name { font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+            .company .name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+            .label.spacious h1 { font-size: 22px; }
+            .label.spacious .count { font-size: 14px; }
+            .label.spacious .content { font-size: 17px; line-height: 1.3; }
+            .label.spacious .items-table td { font-size: 16px; padding: 6px 6px; }
+            .label.spacious .items-table th { font-size: 12px; }
+            .label.spacious .meta { font-size: 12px; margin-top: 6px; }
+            .label.spacious .qr { width: 106px; height: 106px; }
+            .label.spacious .company { font-size: 12px; }
+            .label.spacious .company .name { font-size: 14px; }
+            .label.normal .content { font-size: 16px; }
+            .label.normal .items-table td { font-size: 15px; padding: 5px 6px; }
+            .label.normal .qr { width: 102px; height: 102px; }
+            .label.compact .content { font-size: 14px; }
+            .label.compact .items-table td { font-size: 13px; padding: 3px 4px; }
+            .label.compact .meta { font-size: 10px; }
+            .label.compact .qr { width: 90px; height: 90px; }
             @media print {
               body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
               html, body { width: 102mm; height: 152mm; }
