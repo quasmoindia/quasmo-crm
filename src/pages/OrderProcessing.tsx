@@ -137,12 +137,57 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
   const html = `
       <html>
         <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>Label - ${escHtmlForLabel(args.orderNumber)}</title>
           <style>
             @page { size: 102mm 152mm; margin: 0; }
             * { box-sizing: border-box; }
-            html, body { width: 102mm; height: 152mm; margin: 0; padding: 0; background: #fff; }
-            body { font-family: Arial, sans-serif; }
+            body { margin: 0; padding: 0; background: #fff; font-family: Arial, sans-serif; }
+            .print-actions {
+              position: sticky;
+              top: 0;
+              z-index: 10;
+              padding: 12px 14px;
+              background: #1e293b;
+              color: #f8fafc;
+              text-align: center;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .print-actions p { margin: 8px 0 0 0; font-size: 13px; line-height: 1.45; color: #e2e8f0; }
+            .print-btn {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 48px;
+              padding: 12px 28px;
+              font-size: 17px;
+              font-weight: 700;
+              color: #0f172a;
+              background: #38bdf8;
+              border: none;
+              border-radius: 10px;
+              cursor: pointer;
+              width: 100%;
+              max-width: 360px;
+            }
+            .print-btn:active { opacity: 0.9; }
+            .sheet-wrap { display: block; }
+            @media screen {
+              html, body { width: 100%; min-height: 100%; background: #e2e8f0; }
+              .sheet-wrap {
+                padding: 12px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+              }
+              .sheet {
+                width: 102mm;
+                max-width: calc(100vw - 24px);
+                background: #fff;
+              }
+            }
             .sheet {
               width: 102mm;
             }
@@ -192,18 +237,40 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
             .label.compact .meta { font-size: 10px; }
             .label.compact .qr { width: 90px; height: 90px; }
             @media print {
-              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              html, body { width: 102mm; height: 152mm; }
-              .sheet { width: 102mm; }
+              .print-actions { display: none !important; }
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff !important; }
+              html, body { width: 102mm !important; margin: 0 !important; padding: 0 !important; }
+              .sheet-wrap { padding: 0 !important; background: transparent !important; }
+              .sheet { width: 102mm !important; max-width: none !important; }
               .label { width: 102mm; height: 152mm; }
             }
           </style>
         </head>
         <body>
-          <div class="sheet">
-            ${labelsHtml}
+          <div class="print-actions no-print">
+            <button type="button" class="print-btn" id="shipping-label-print-btn">Print label</button>
+            <p>
+              <strong>Phone / tablet:</strong> tap <strong>Print label</strong> above (or use the browser menu →
+              Print). Paper size: <strong>4×6 in</strong> (102×152 mm) if your printer asks.
+            </p>
           </div>
-          <script>window.print();</script>
+          <div class="sheet-wrap">
+            <div class="sheet">
+              ${labelsHtml}
+            </div>
+          </div>
+          <script>
+            (function () {
+              var btn = document.getElementById('shipping-label-print-btn');
+              if (btn) btn.addEventListener('click', function () { window.print(); });
+              var touch = typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0);
+              var narrow = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
+              var useManualPrint = touch || narrow;
+              if (!useManualPrint) {
+                setTimeout(function () { window.print(); }, 350);
+              }
+            })();
+          </script>
         </body>
       </html>
     `;
