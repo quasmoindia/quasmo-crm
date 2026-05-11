@@ -28,6 +28,7 @@ import { useCustomersList } from '../api/customers';
 import { useProductsList } from '../api/products';
 import { useCouriersList, useCreateCourier } from '../api/couriers';
 import { ORDER_STATUS_OPTIONS, type Order, type OrderStatus } from '../types/order';
+import { API_BASE_URL } from '../utils/constants';
 
 function StatusBadge({ status }: { status: OrderStatus }) {
   const map: Record<OrderStatus, { label: string; color: string }> = {
@@ -54,6 +55,7 @@ function escHtmlForLabel(v: string) {
 }
 
 type ShippingLabelPrintArgs = {
+  orderId: string;
   orderNumber: string;
   shipToName: string;
   shipToPhone: string;
@@ -173,6 +175,8 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
               max-width: 360px;
             }
             .print-btn:active { opacity: 0.9; }
+            .btn-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+            .download-btn { background: #e2e8f0; color: #0f172a; border: 1px solid rgba(148, 163, 184, 0.8); }
             .sheet-wrap { display: block; }
             @media screen {
               html, body { width: 100%; min-height: 100%; background: #e2e8f0; }
@@ -248,10 +252,15 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
         </head>
         <body>
           <div class="print-actions no-print">
-            <button type="button" class="print-btn" id="shipping-label-print-btn">Print label</button>
+            <div class="btn-row">
+              <button type="button" class="print-btn" id="shipping-label-print-btn">Print label</button>
+              <button type="button" class="print-btn download-btn" id="shipping-label-download-btn">Download PDF</button>
+            </div>
             <p>
               <strong>Phone / tablet:</strong> tap <strong>Print label</strong> above (or use the browser menu →
               Print). Paper size: <strong>4×6 in</strong> (102×152 mm) if your printer asks.
+              <br/>
+              <strong>Download PDF:</strong> choose <strong>Save as PDF</strong> (or <strong>Open in Preview</strong>) in the print dialog.
             </p>
           </div>
           <div class="sheet-wrap">
@@ -263,6 +272,32 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
             (function () {
               var btn = document.getElementById('shipping-label-print-btn');
               if (btn) btn.addEventListener('click', function () { window.print(); });
+              var dl = document.getElementById('shipping-label-download-btn');
+              if (dl) dl.addEventListener('click', function () {
+                var token = localStorage.getItem('token');
+                var url = '${API_BASE_URL.replace(/\/$/, '')}/orders/${encodeURIComponent(args.orderId)}/shipping-label/pdf';
+                fetch(url, {
+                  method: 'GET',
+                  headers: token ? { Authorization: 'Bearer ' + token } : {},
+                })
+                  .then(function (res) {
+                    if (!res.ok) throw new Error('Could not download PDF');
+                    return res.blob();
+                  })
+                  .then(function (blob) {
+                    var fileUrl = URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = fileUrl;
+                    a.download = 'shipping-label-${args.orderNumber}.pdf';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(fileUrl);
+                  })
+                  .catch(function () {
+                    window.print();
+                  });
+              });
               var touch = typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0);
               var narrow = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
               var useManualPrint = touch || narrow;
@@ -331,6 +366,7 @@ function ShippingLabelModal({
         return;
       }
       openShippingLabelPrintWindow({
+        orderId: updated._id,
         orderNumber: updated.orderNumber,
         shipToName: s.shipToName,
         shipToPhone: s.shipToPhone,
