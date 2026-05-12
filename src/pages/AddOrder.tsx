@@ -94,12 +94,12 @@ export function AddOrder() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Create Order</h1>
-          <p className="mt-1 text-sm text-slate-500">Process a new order for a customer</p>
+          <h1 className="text-xl font-bold text-slate-800 sm:text-2xl">Create Order</h1>
+          <p className="mt-1 text-xs text-slate-500 sm:text-sm">Process a new order for a customer</p>
         </div>
-        <Button variant="outline" onClick={() => navigate('/dashboard/orders')}>
+        <Button variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/dashboard/orders')}>
           <FiArrowLeft className="mr-1.5 inline size-4" />
           Back to Orders
         </Button>

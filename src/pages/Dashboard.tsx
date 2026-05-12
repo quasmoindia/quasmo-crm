@@ -1,5 +1,10 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import {
+  FiAlertCircle,
+  FiTrendingUp,
+} from 'react-icons/fi';
+import type { IconType } from 'react-icons';
 import { useCurrentUser } from '../api/auth';
 import {
   listComplaintsApi,
@@ -7,8 +12,6 @@ import {
   useComplaintsList,
 } from '../api/complaints';
 import { listLeadsApi, leadsListKey, useLeadsList } from '../api/leads';
-import { listTaxInvoicesApi, taxInvoicesListKey } from '../api/taxInvoices';
-import { useUsersList } from '../api/users';
 import { Card } from '../components/Card';
 import { canAccessModule } from '../config/roles';
 import type { ComplaintStatus } from '../types/complaint';
@@ -33,20 +36,36 @@ function StatTile({
   label,
   value,
   sub,
-  accent,
+  icon: Icon,
+  tone = 'indigo',
 }: {
   label: string;
   value: string | number;
   sub?: string;
-  accent?: string;
+  icon: IconType;
+  tone?: 'indigo' | 'green' | 'violet' | 'orange' | 'blue' | 'rose';
 }) {
+  const toneClass: Record<NonNullable<typeof tone>, string> = {
+    indigo: 'bg-indigo-600/10 text-indigo-600',
+    green: 'bg-emerald-500/10 text-emerald-600',
+    violet: 'bg-violet-500/10 text-violet-600',
+    orange: 'bg-orange-500/10 text-orange-600',
+    blue: 'bg-sky-500/10 text-sky-600',
+    rose: 'bg-rose-500/10 text-rose-600',
+  };
+
   return (
-    <div
-      className={`rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${accent ?? ''}`}
-    >
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{value}</p>
-      {sub ? <p className="mt-0.5 text-xs text-slate-500">{sub}</p> : null}
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+        <span className={`flex size-9 shrink-0 items-center justify-center rounded-xl sm:size-10 ${toneClass[tone]}`}>
+          <Icon className="size-4 sm:size-5" />
+        </span>
+      </div>
+      <p className="mt-2 text-3xl font-bold leading-none tabular-nums text-slate-900 sm:text-4xl">
+        {value}
+      </p>
+      {sub ? <p className="mt-1 text-xs text-slate-500">{sub}</p> : null}
     </div>
   );
 }
@@ -65,14 +84,6 @@ export function Dashboard() {
 
   const complaintsRecent = useComplaintsList({ page: 1, limit: 5 }, { enabled: canComplaints });
   const leadsRecent = useLeadsList({ page: 1, limit: 5 }, { enabled: canLeads });
-  const usersList = useUsersList({ enabled: canUsers });
-
-  const invoicesCountQuery = useQuery({
-    queryKey: taxInvoicesListKey({ page: 1, limit: 1 }),
-    queryFn: () => listTaxInvoicesApi({ page: 1, limit: 1 }),
-    enabled: canInvoices,
-    staleTime: 30_000,
-  });
 
   const complaintStatusQueries = useQueries({
     queries: COMPLAINT_STATUSES.map((status) => ({
@@ -101,69 +112,53 @@ export function Dashboard() {
   const complaintsLoading =
     canComplaints && (complaintsRecent.isLoading || complaintStatusQueries.some((q) => q.isLoading));
   const leadsLoading = canLeads && (leadsRecent.isLoading || leadStatusQueries.some((q) => q.isLoading));
-  const invoicesLoading = canInvoices && invoicesCountQuery.isLoading;
 
   const recentComplaints: Complaint[] = complaintsRecent.data?.data ?? [];
   const recentLeads: Lead[] = leadsRecent.data?.data ?? [];
-  const userCount = usersList.data?.data?.length ?? 0;
-  const invoicesTotal = invoicesCountQuery.data?.pagination?.total ?? 0;
 
   const hasAnyModule =
     canComplaints || canLeads || canUsers || canInvoices || canRoles;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
-        <p className="mt-1 text-slate-600">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl xl:text-5xl">
+          Admin Dashboard
+        </h1>
+        <p className="mt-1.5 text-sm text-slate-600 sm:mt-2 sm:text-base">
           {meLoading ? (
             'Loading…'
           ) : user?.fullName ? (
             <>
-              Welcome back, <span className="font-medium text-slate-800">{user.fullName}</span>.
-              Here’s a snapshot of complaints, leads, invoices, and team activity.
+              Comprehensive business overview for <span className="font-medium text-slate-800">{user.fullName}</span>.
             </>
           ) : (
-            'Welcome to Quasmo CRM. Here’s a snapshot of your workspace.'
+            'Comprehensive business overview and analytics.'
           )}
         </p>
       </div>
 
       {hasAnyModule && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-4">
           {canComplaints && (
             <StatTile
-              label="Total complaints"
+              label="Service requests"
               value={complaintsLoading ? '…' : complaintsTotal}
-              sub="All statuses"
-              accent="border-l-4 border-l-indigo-500"
+              sub="Open, in-progress, resolved"
+              icon={FiAlertCircle}
+              tone="violet"
             />
           )}
           {canLeads && (
             <StatTile
-              label="Total leads"
+              label="Active leads"
               value={leadsLoading ? '…' : leadsTotal}
-              sub="Pipeline"
-              accent="border-l-4 border-l-sky-500"
+              sub="+ new this week"
+              icon={FiTrendingUp}
+              tone="green"
             />
           )}
-          {canUsers && (
-            <StatTile
-              label="Team users"
-              value={usersList.isLoading ? '…' : userCount}
-              sub="Registered accounts"
-              accent="border-l-4 border-l-emerald-500"
-            />
-          )}
-          {canInvoices && (
-            <StatTile
-              label="Tax documents"
-              value={invoicesLoading ? '…' : invoicesTotal}
-              sub="Invoices, proformas & quotes"
-              accent="border-l-4 border-l-violet-500"
-            />
-          )}
-          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4 sm:col-span-2 xl:col-span-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)] sm:col-span-2 xl:col-span-2">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Quick links</p>
             <ul className="mt-2 grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
               {canComplaints && (

@@ -1,7 +1,47 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { FiBell, FiSettings } from 'react-icons/fi';
+import type { IconType } from 'react-icons';
+import {
+  FiAlertCircle,
+  FiBarChart2,
+  // FiBell,
+  FiBox,
+  FiClipboard,
+  FiDollarSign,
+  FiFileText,
+  FiGrid,
+  FiLogOut,
+  FiMenu,
+  FiSearch,
+  FiSettings,
+  FiShoppingCart,
+  FiUsers,
+  FiUserCheck,
+  FiX,
+} from 'react-icons/fi';
 import { clearStoredToken, useCurrentUser } from '../api/auth';
 import { canAccessModule, NAV_MODULES, getModuleIdFromPath } from '../config/roles';
+
+const NAV_SECTIONS = [
+  { title: null, moduleIds: ['dashboard'] },
+  { title: 'Sales & CRM', moduleIds: ['leads', 'customers', 'complaints'] },
+  { title: 'Products & Inventory', moduleIds: ['products', 'orders', 'documents'] },
+  { title: 'Operations', moduleIds: ['invoices', 'expenses', 'users', 'roles'] },
+] as const;
+
+const navIconsByModuleId: Record<string, IconType> = {
+  dashboard: FiGrid,
+  leads: FiBarChart2,
+  customers: FiUsers,
+  complaints: FiAlertCircle,
+  products: FiBox,
+  orders: FiShoppingCart,
+  documents: FiFileText,
+  invoices: FiClipboard,
+  expenses: FiDollarSign,
+  users: FiUserCheck,
+  roles: FiSettings,
+};
 
 export function DashboardLayout() {
   const navigate = useNavigate();
@@ -16,68 +56,181 @@ export function DashboardLayout() {
   const canAccessCurrent =
     !currentModuleId || !user || canAccessModule(user.role, currentModuleId, user.roleModules);
   const redirectToDashboard = user && currentModuleId && !canAccessCurrent;
+  const navByModuleId = new Map(visibleNavItems.map((item) => [item.moduleId, item]));
+
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [drawerOpen]);
 
   function handleLogout() {
     clearStoredToken();
     navigate('/', { replace: true });
   }
 
+  const sidebarContent = (
+    <>
+      <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/15 bg-linear-to-br from-[#3b4dff] via-[#2f5bff] to-[#2b66ff] px-4 text-white shadow-[0_1px_0_rgba(15,23,42,0.06)] sm:px-5">
+        <h1 className="truncate text-lg font-semibold leading-none tracking-tight">Quasmo CRM</h1>
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(false)}
+          className="rounded-md p-1.5 text-white/80 transition-colors hover:bg-white/15 lg:hidden"
+          aria-label="Close navigation menu"
+        >
+          <FiX className="size-5" />
+        </button>
+      </div>
+      <nav className="flex flex-1 flex-col gap-5 overflow-y-auto p-3.5">
+        {NAV_SECTIONS.map((section) => {
+          const sectionItems = section.moduleIds
+            .map((moduleId) => navByModuleId.get(moduleId))
+            .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+          if (!sectionItems.length) return null;
+
+          return (
+            <div key={section.title ?? 'root'} className="space-y-2">
+              {section.title ? (
+                <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  {section.title}
+                </p>
+              ) : null}
+              <div className="space-y-1">
+                {sectionItems.map(({ path, label, end, moduleId }) => {
+                  const Icon = navIconsByModuleId[moduleId] ?? FiGrid;
+                  return (
+                    <NavLink
+                      key={path}
+                      to={path}
+                      end={end}
+                      onClick={() => setDrawerOpen(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+                          isActive
+                            ? 'bg-linear-to-r from-[#3f51ff] to-[#305dff] text-white shadow-[0_8px_20px_rgba(59,93,255,0.35)]'
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`
+                      }
+                    >
+                      <Icon className="size-4 shrink-0" />
+                      <span className="truncate">{label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </nav>
+      <div className="shrink-0 border-t border-slate-200 p-3">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
+        >
+          <FiLogOut className="size-4" />
+          Logout
+        </button>
+      </div>
+    </>
+  );
+
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-100">
-      <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-slate-200 bg-white">
-        <div className="shrink-0 border-b border-slate-200 p-4">
-          <h1 className="text-lg font-semibold text-slate-800">Quasmo CRM</h1>
-        </div>
-        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
-          {visibleNavItems.map(({ path, label, end }) => (
-            <NavLink
-              key={path}
-              to={path}
-              end={end}
-              className={({ isActive }) =>
-                `rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`
-              }
-            >
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="shrink-0 border-t border-slate-200 p-3">
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-          >
-            Sign out
-          </button>
-        </div>
+    <div className="flex h-screen overflow-hidden bg-[#f4f6fb]">
+      {drawerOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation overlay"
+          className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm lg:hidden"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-72 max-w-[85vw] flex-col border-r border-[#dfe5f2] bg-white shadow-2xl transition-transform duration-300 ease-out lg:static lg:z-auto lg:w-72 lg:translate-x-0 lg:shadow-none ${
+          drawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+        aria-label="Primary navigation"
+      >
+        {sidebarContent}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex shrink-0 items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-3">
-          <span className="mr-auto text-sm font-medium text-slate-700">
-            Welcome, {user?.fullName ?? user?.email ?? 'User'}
-          </span>
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[#dfe5f2] bg-white px-4 sm:gap-3 sm:px-6">
           <button
             type="button"
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Notifications"
+            onClick={() => setDrawerOpen(true)}
+            className="shrink-0 rounded-xl p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 lg:hidden"
+            aria-label="Open navigation menu"
           >
-            <FiBell className="size-5" />
+            <FiMenu className="size-5" />
           </button>
-          <button
-            type="button"
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Settings"
-          >
-            <FiSettings className="size-5" />
-          </button>
+
+          <span className="shrink-0 text-base font-semibold text-slate-800 sm:hidden">Quasmo CRM</span>
+
+          <div className="hidden min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 sm:flex sm:max-w-xl lg:max-w-2xl">
+            <FiSearch className="size-4 shrink-0 text-slate-400" />
+            <input
+              type="search"
+              placeholder="Quick search..."
+              className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+            />
+          </div>
+
+          <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="hidden min-w-0 flex-col text-right sm:flex sm:pr-1">
+              <span className="truncate text-sm font-semibold leading-tight text-slate-900">
+                {user?.fullName ?? 'Admin User'}
+              </span>
+              <span className="truncate text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                {(user?.role ?? 'admin').replace(/_/g, ' ').toUpperCase()}
+              </span>
+            </div>
+            {/* Notifications — re-enable when wired up
+            <button
+              type="button"
+              className="relative shrink-0 rounded-xl p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Notifications"
+            >
+              <FiBell className="size-5" />
+              <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-rose-500" />
+            </button>
+            */}
+            {/* Settings shortcut — re-enable when needed
+            <button
+              type="button"
+              className="hidden shrink-0 rounded-xl p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 sm:inline-flex"
+              aria-label="Settings"
+            >
+              <FiSettings className="size-5" />
+            </button>
+            */}
+            <div
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#3f51ff] to-[#305dff] text-xs font-semibold text-white"
+              title={user?.fullName ?? user?.email ?? 'User'}
+              aria-label={user?.fullName ? `Account: ${user.fullName}` : 'Account'}
+            >
+              <span aria-hidden>{(user?.fullName ?? user?.email ?? 'U').charAt(0).toUpperCase()}</span>
+            </div>
+          </div>
         </header>
-        <main className="min-h-0 flex-1 overflow-auto p-6">
+        <main className="min-h-0 flex-1 overflow-auto bg-[#f4f6fb] px-4 py-3 sm:px-6 sm:py-5 lg:py-6">
           {redirectToDashboard ? <Navigate to="/dashboard" replace /> : <Outlet />}
         </main>
       </div>

@@ -89,6 +89,32 @@ export function useDeleteOrder() {
   });
 }
 
+export async function downloadShippingLabelPdfApi(
+  orderId: string
+): Promise<{ blob: Blob; filename: string }> {
+  const token = localStorage.getItem('token');
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const url = `${base}${ORDERS_BASE}/${orderId}/shipping-label/pdf`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(
+      (data as { message?: string }).message ?? 'Failed to generate shipping label PDF'
+    );
+  }
+  const blob = await res.blob();
+  if (blob.type && blob.type !== 'application/pdf') {
+    throw new Error('Unexpected response from server while generating PDF.');
+  }
+  const disposition = res.headers.get('Content-Disposition');
+  const match = disposition?.match(/filename="?([^";\n]+)"?/);
+  const filename = match?.[1] ?? `shipping-label-${orderId}.pdf`;
+  return { blob, filename };
+}
+
 export async function uploadOrderDocumentsApi(id: string, files: File[]) {
   const token = localStorage.getItem('token');
   const base = API_BASE_URL.replace(/\/$/, '');
@@ -106,4 +132,22 @@ export async function uploadOrderDocumentsApi(id: string, files: File[]) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { message?: string }).message ?? 'Upload failed');
   return data as { uploaded: number; failed: number; urls: string[]; errors: string[] };
+}
+
+export async function removeOrderDocumentApi(id: string, url: string): Promise<Order> {
+  const token = localStorage.getItem('token');
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const endpoint = `${base}${ORDERS_BASE}/${id}/documents?url=${encodeURIComponent(url)}`;
+  const res = await fetch(endpoint, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as { message?: string }).message ?? 'Failed to remove document');
+  }
+  return data as Order;
 }

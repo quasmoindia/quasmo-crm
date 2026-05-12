@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiPlus, FiFileText, FiUpload, FiDownload, FiList, FiGrid, FiSearch, FiEye, FiArrowRightCircle } from 'react-icons/fi';
+import { FiPlus, FiFileText, FiUpload, FiDownload, FiList, FiGrid, FiSearch, FiEye, FiArrowRightCircle, FiX } from 'react-icons/fi';
 import {
   DndContext,
   type DragEndEvent,
@@ -22,6 +22,8 @@ import {
   useDeleteOrder,
   useSaveShippingLabelSnapshot,
   uploadOrderDocumentsApi,
+  downloadShippingLabelPdfApi,
+  removeOrderDocumentApi,
 } from '../api/orders';
 import { useCurrentUser } from '../api/auth';
 import { useCustomersList } from '../api/customers';
@@ -52,6 +54,47 @@ function escHtmlForLabel(v: string) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function buildShippingLabelFilename(orderNumber: string) {
+  const safe = orderNumber
+    .trim()
+    .replace(/[\\/:*?"<>|\s]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return `shipping-label-${safe || 'order'}.pdf`;
+}
+
+function filenameFromUrl(url: string): string {
+  try {
+    const path = new URL(url).pathname;
+    const last = path.split('/').filter(Boolean).pop();
+    if (!last) return url;
+    return decodeURIComponent(last);
+  } catch {
+    return url;
+  }
+}
+
+function triggerPdfDownload(blob: Blob, filename: string) {
+  const fileUrl = URL.createObjectURL(blob);
+  const isIOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  if (isIOS) {
+    window.open(fileUrl, '_blank');
+    setTimeout(() => URL.revokeObjectURL(fileUrl), 120_000);
+    return;
+  }
+
+  const anchor = document.createElement('a');
+  anchor.href = fileUrl;
+  anchor.download = filename;
+  anchor.rel = 'noopener';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(fileUrl), 15_000);
 }
 
 type ShippingLabelPrintArgs = {
@@ -260,7 +303,8 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
               <strong>Phone / tablet:</strong> tap <strong>Print label</strong> above (or use the browser menu →
               Print). Paper size: <strong>4×6 in</strong> (102×152 mm) if your printer asks.
               <br/>
-              <strong>Download PDF:</strong> choose <strong>Save as PDF</strong> (or <strong>Open in Preview</strong>) in the print dialog.
+              <strong>Download PDF:</strong> on iPad/iPhone this opens PDF preview — then use <strong>Share</strong> →
+              <strong>Save to Files</strong>.
             </p>
           </div>
           <div class="sheet-wrap">
@@ -270,32 +314,59 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
           </div>
           <script>
             (function () {
-              var btn = document.getElementById('shipping-label-print-btn');
-              if (btn) btn.addEventListener('click', function () { window.print(); });
-              var dl = document.getElementById('shipping-label-download-btn');
-              if (dl) dl.addEventListener('click', function () {
-                var token = localStorage.getItem('token');
+              function fetchLabelPdfBlob() {
+                var token = '';
+                try { token = localStorage.getItem('token') || ''; } catch (_) {}
                 var url = '${API_BASE_URL.replace(/\/$/, '')}/orders/${encodeURIComponent(args.orderId)}/shipping-label/pdf';
-                fetch(url, {
+                return fetch(url, {
                   method: 'GET',
                   headers: token ? { Authorization: 'Bearer ' + token } : {},
-                })
-                  .then(function (res) {
-                    if (!res.ok) throw new Error('Could not download PDF');
-                    return res.blob();
-                  })
-                  .then(function (blob) {
-                    var fileUrl = URL.createObjectURL(blob);
-                    var a = document.createElement('a');
-                    a.href = fileUrl;
-                    a.download = 'shipping-label-${args.orderNumber}.pdf';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    URL.revokeObjectURL(fileUrl);
-                  })
+                }).then(function (res) {
+                  if (!res.ok) throw new Error('Could not fetch PDF');
+                  return res.blob();
+                });
+              }
+              function openOrDownloadPdfBlob(blob) {
+                var fileUrl = URL.createObjectURL(blob);
+                var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                if (isIOS) {
+                  window.open(fileUrl, '_blank');
+                  setTimeout(function () { URL.revokeObjectURL(fileUrl); }, 120000);
+                  return;
+                }
+                var a = document.createElement('a');
+                a.href = fileUrl;
+                a.download = 'shipping-label-${args.orderNumber}.pdf';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(function () { URL.revokeObjectURL(fileUrl); }, 15000);
+              }
+              var btn = document.getElementById('shipping-label-print-btn');
+              if (btn) btn.addEventListener('click', function () {
+                var ua = navigator.userAgent || '';
+                var isSafari = /Safari/i.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR/i.test(ua);
+                if (isSafari) {
+                  fetchLabelPdfBlob()
+                    .then(function (blob) {
+                      var fileUrl = URL.createObjectURL(blob);
+                      window.open(fileUrl, '_blank');
+                      setTimeout(function () { URL.revokeObjectURL(fileUrl); }, 120000);
+                    })
+                    .catch(function () {
+                      window.print();
+                    });
+                  return;
+                }
+                window.print();
+              });
+              var dl = document.getElementById('shipping-label-download-btn');
+              if (dl) dl.addEventListener('click', function () {
+                fetchLabelPdfBlob()
+                  .then(function (blob) { openOrDownloadPdfBlob(blob); })
                   .catch(function () {
-                    window.print();
+                    alert('Unable to download PDF on this device right now. Please try again.');
                   });
               });
               var touch = typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0);
@@ -329,6 +400,9 @@ function ShippingLabelModal({
   const [shipToAddress, setShipToAddress] = useState(snap?.shipToAddress ?? order.customer?.address ?? '');
   const [labelCount, setLabelCount] = useState(String(snap?.labelCount ?? 1));
   const [error, setError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<'idle' | 'print' | 'download'>('idle');
+
+  const isBusy = pendingAction !== 'idle';
 
   useEffect(() => {
     const s = order.shippingLabelSnapshot;
@@ -339,27 +413,40 @@ function ShippingLabelModal({
     setError(null);
   }, [order._id, order.shippingLabelSnapshot?.savedAt]);
 
-  async function handleSaveAndPrint() {
-    setError(null);
+  function validateInputs(): { ok: true; labelCount: number } | { ok: false; message: string } {
     if (!shipToName.trim()) {
-      setError('Ship-to name is required.');
-      return;
+      return { ok: false, message: 'Ship-to name is required.' };
     }
     const n = Number.parseInt(labelCount, 10);
     if (!Number.isFinite(n) || n < 1 || n > 99) {
-      setError('Number of labels must be between 1 and 99.');
+      return { ok: false, message: 'Number of labels must be between 1 and 99.' };
+    }
+    return { ok: true, labelCount: n };
+  }
+
+  async function saveSnapshot(n: number): Promise<Order> {
+    return saveMutation.mutateAsync({
+      id: order._id,
+      payload: {
+        shipToName: shipToName.trim(),
+        shipToPhone: shipToPhone.trim(),
+        shipToAddress: shipToAddress.trim(),
+        labelCount: n,
+      },
+    });
+  }
+
+  async function handleSaveAndPrint() {
+    setError(null);
+    if (isBusy) return;
+    const v = validateInputs();
+    if (!v.ok) {
+      setError(v.message);
       return;
     }
+    setPendingAction('print');
     try {
-      const updated = await saveMutation.mutateAsync({
-        id: order._id,
-        payload: {
-          shipToName: shipToName.trim(),
-          shipToPhone: shipToPhone.trim(),
-          shipToAddress: shipToAddress.trim(),
-          labelCount: n,
-        },
-      });
+      const updated = await saveSnapshot(v.labelCount);
       const s = updated.shippingLabelSnapshot;
       if (!s) {
         setError('Saved but label data was missing in the response.');
@@ -377,6 +464,29 @@ function ShippingLabelModal({
       onSaved(updated);
     } catch (e) {
       setError((e as Error).message ?? 'Failed to save label details');
+    } finally {
+      setPendingAction('idle');
+    }
+  }
+
+  async function handleSaveAndDownloadPdf() {
+    setError(null);
+    if (isBusy) return;
+    const v = validateInputs();
+    if (!v.ok) {
+      setError(v.message);
+      return;
+    }
+    setPendingAction('download');
+    try {
+      const updated = await saveSnapshot(v.labelCount);
+      const { blob, filename } = await downloadShippingLabelPdfApi(updated._id);
+      triggerPdfDownload(blob, filename || buildShippingLabelFilename(updated.orderNumber));
+      onSaved(updated);
+    } catch (e) {
+      setError((e as Error).message ?? 'Failed to download shipping label PDF.');
+    } finally {
+      setPendingAction('idle');
     }
   }
 
@@ -412,7 +522,7 @@ function ShippingLabelModal({
             label="Ship-to name *"
             value={shipToName}
             onChange={(e) => setShipToName(e.target.value)}
-            disabled={saveMutation.isPending}
+            disabled={isBusy}
             required
           />
           <Input
@@ -420,7 +530,7 @@ function ShippingLabelModal({
             type="tel"
             value={shipToPhone}
             onChange={(e) => setShipToPhone(e.target.value)}
-            disabled={saveMutation.isPending}
+            disabled={isBusy}
           />
           <div>
             <label htmlFor="ship-to-address" className="mb-1 block text-sm font-medium text-slate-700">
@@ -430,7 +540,7 @@ function ShippingLabelModal({
               id="ship-to-address"
               value={shipToAddress}
               onChange={(e) => setShipToAddress(e.target.value)}
-              disabled={saveMutation.isPending}
+              disabled={isBusy}
               rows={4}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               placeholder="Street, city, state, PIN…"
@@ -443,7 +553,7 @@ function ShippingLabelModal({
             max={99}
             value={labelCount}
             onChange={(e) => setLabelCount(e.target.value)}
-            disabled={saveMutation.isPending}
+            disabled={isBusy}
             required
           />
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -460,10 +570,34 @@ function ShippingLabelModal({
           </div>
         </div>
         <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50/90 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onClose} disabled={saveMutation.isPending}>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={onClose}
+            disabled={isBusy}
+          >
             Cancel
           </Button>
-          <Button type="button" className="w-full sm:w-auto" loading={saveMutation.isPending} onClick={() => void handleSaveAndPrint()}>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full sm:w-auto"
+            loading={pendingAction === 'download'}
+            disabled={pendingAction === 'print'}
+            onClick={() => void handleSaveAndDownloadPdf()}
+            title="Save details and download a 4×6 in PDF (one label per page)"
+          >
+            <FiDownload className="mr-1.5 inline size-4" />
+            Save &amp; download PDF
+          </Button>
+          <Button
+            type="button"
+            className="w-full sm:w-auto"
+            loading={pendingAction === 'print'}
+            disabled={pendingAction === 'download'}
+            onClick={() => void handleSaveAndPrint()}
+          >
             Save &amp; print label
           </Button>
         </div>
@@ -528,6 +662,57 @@ function OrderDetailsModal({
       notes: item.notes ?? '',
     }))
   );
+
+  const [documents, setDocuments] = useState<string[]>(order.documents ?? []);
+  const [docError, setDocError] = useState<string | null>(null);
+  const [uploadingDocs, setUploadingDocs] = useState(false);
+  const [removingDocUrl, setRemovingDocUrl] = useState<string | null>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setDocuments(order.documents ?? []);
+    setDocError(null);
+  }, [order._id, order.documents]);
+
+  const docsBusy = uploadingDocs || removingDocUrl !== null;
+
+  async function handleUploadDocs(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    setDocError(null);
+    setUploadingDocs(true);
+    try {
+      const result = await uploadOrderDocumentsApi(order._id, files);
+      if (result.urls.length > 0) {
+        setDocuments((prev) => [...prev, ...result.urls]);
+      }
+      if (result.errors.length > 0) {
+        setDocError(result.errors.join(' • '));
+      } else if (result.uploaded === 0) {
+        setDocError('No files were uploaded.');
+      }
+    } catch (e) {
+      setDocError((e as Error).message ?? 'Failed to upload documents.');
+    } finally {
+      setUploadingDocs(false);
+      if (docInputRef.current) docInputRef.current.value = '';
+    }
+  }
+
+  async function handleRemoveDoc(url: string) {
+    if (docsBusy) return;
+    if (!window.confirm('Remove this dispatch document? This cannot be undone.')) return;
+    setDocError(null);
+    setRemovingDocUrl(url);
+    try {
+      const updated = await removeOrderDocumentApi(order._id, url);
+      setDocuments(updated.documents ?? []);
+    } catch (e) {
+      setDocError((e as Error).message ?? 'Failed to remove document.');
+    } finally {
+      setRemovingDocUrl(null);
+    }
+  }
 
   const findCourierIdByName = (name: string) => {
     const normalized = name.trim().toLowerCase();
@@ -789,25 +974,90 @@ function OrderDetailsModal({
                 <h3 className="mb-2 text-sm font-semibold text-emerald-800">Dispatch Details</h3>
                 <p className="text-sm text-slate-700"><span className="font-medium">Courier:</span> {order.courier?.name || '—'}</p>
                 <p className="text-sm text-slate-700"><span className="font-medium">Tracking Number:</span> {order.trackingNumber || '—'}</p>
-                <p className="mb-2 text-sm text-slate-700"><span className="font-medium">Dispatch Date:</span> {order.dispatchDate ? formatDate(order.dispatchDate) : '—'}</p>
-                {order.documents?.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {order.documents.map((url, idx) => (
-                      <a
-                        key={`${url}-${idx}`}
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-xs font-medium text-indigo-700 ring-1 ring-slate-200 hover:bg-slate-50"
+                <p className="mb-3 text-sm text-slate-700"><span className="font-medium">Dispatch Date:</span> {order.dispatchDate ? formatDate(order.dispatchDate) : '—'}</p>
+
+                <div className="rounded-lg border border-emerald-200 bg-white/70 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-800">Documents</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={docInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => void handleUploadDocs(e.target.files)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        loading={uploadingDocs}
+                        disabled={docsBusy}
+                        onClick={() => docInputRef.current?.click()}
                       >
-                        <FiDownload className="size-3.5" />
-                        Document {idx + 1}
-                      </a>
-                    ))}
+                        <FiUpload className="mr-1.5 inline size-4" />
+                        Upload more
+                      </Button>
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-sm text-slate-700">No dispatch documents uploaded.</p>
-                )}
+
+                  {documents.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate-600">No dispatch documents uploaded.</p>
+                  ) : (
+                    <ul className="mt-3 space-y-1.5">
+                      {documents.map((url, idx) => {
+                        const removing = removingDocUrl === url;
+                        return (
+                          <li
+                            key={`${url}-${idx}`}
+                            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5"
+                          >
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-indigo-700 hover:text-indigo-900"
+                              title={filenameFromUrl(url)}
+                            >
+                              <FiDownload className="size-3.5 shrink-0" />
+                              <span className="truncate">
+                                {filenameFromUrl(url) || `Document ${idx + 1}`}
+                              </span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => void handleRemoveDoc(url)}
+                              disabled={docsBusy}
+                              className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Remove document"
+                              aria-label={`Remove document ${idx + 1}`}
+                            >
+                              {removing ? (
+                                <svg
+                                  className="size-4 animate-spin"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  aria-hidden
+                                >
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                              ) : (
+                                <FiX className="size-4" />
+                              )}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+
+                  {docError && (
+                    <p className="mt-2 text-xs text-red-600" role="alert">
+                      {docError}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -1276,7 +1526,7 @@ function OrderKanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`min-h-[220px] min-w-[300px] max-w-[340px] shrink-0 rounded-xl border-2 p-3 ${ORDER_STATUS_COLORS[status]} ${isOver ? 'ring-2 ring-indigo-400 ring-offset-2' : ''}`}
+      className={`min-h-[220px] w-[85vw] min-w-[260px] max-w-[340px] shrink-0 snap-start rounded-xl border-2 p-3 sm:w-auto sm:min-w-[300px] ${ORDER_STATUS_COLORS[status]} ${isOver ? 'ring-2 ring-indigo-400 ring-offset-2' : ''}`}
     >
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-800">{label}</h3>
@@ -1412,11 +1662,11 @@ export function OrderProcessing() {
 
   return (
     <div>
-      <div className="mb-6 rounded-2xl border border-slate-200 bg-linear-to-r from-white via-slate-50 to-indigo-50/70 p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mb-4 rounded-2xl border border-slate-200 bg-linear-to-r from-white via-slate-50 to-indigo-50/70 p-4 shadow-sm sm:mb-6 sm:p-5">
+        <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Order Management</h1>
-            <p className="mt-1 text-sm text-slate-500">Track every order from QC to dispatch with list or kanban workflow.</p>
+            <h1 className="text-xl font-bold text-slate-800 sm:text-2xl">Order Management</h1>
+            <p className="mt-1 text-xs text-slate-500 sm:text-sm">Track every order from QC to dispatch with list or kanban workflow.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
@@ -1445,18 +1695,18 @@ export function OrderProcessing() {
                 <FiGrid className="size-5" />
               </button>
             </div>
-            <Button onClick={() => navigate('/dashboard/orders/new')}>
+            <Button className="flex-1 sm:flex-none" onClick={() => navigate('/dashboard/orders/new')}>
               <FiPlus className="mr-1.5 inline-block size-4" /> Create Order
             </Button>
           </div>
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-2 sm:gap-3 xl:grid-cols-4">
         {ORDER_STATUS_OPTIONS.map((option) => (
-          <Card key={option.value}>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{option.label}</p>
-            <p className="mt-2 text-2xl font-bold text-slate-800">{totalsByStatus[option.value]}</p>
+          <Card key={option.value} className="p-3! sm:p-6!">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">{option.label}</p>
+            <p className="mt-1.5 text-xl font-bold text-slate-800 sm:mt-2 sm:text-2xl">{totalsByStatus[option.value]}</p>
           </Card>
         ))}
       </div>
@@ -1466,8 +1716,8 @@ export function OrderProcessing() {
           <p className="py-8 text-center text-red-600">{(error as Error).message}</p>
         ) : isKanban ? (
           <>
-            <div className="mb-4 flex flex-wrap items-end gap-3">
-              <div className="min-w-[220px] flex-1">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+              <div className="min-w-0 flex-1 sm:min-w-[220px]">
                 <label className="mb-1 block text-sm font-medium text-slate-700">Search</label>
                 <input
                   type="search"
@@ -1483,7 +1733,7 @@ export function OrderProcessing() {
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
-              <Button variant="outline" onClick={() => setSearchQuery(searchInput)}>
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setSearchQuery(searchInput)}>
                 <FiSearch className="mr-1.5 inline size-4" />
                 Apply search
               </Button>
@@ -1494,9 +1744,10 @@ export function OrderProcessing() {
             ) : (
               <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
                 <div className="mb-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-                  Drag an order card to another status column to update workflow.
+                  <span className="hidden sm:inline">Drag an order card to another status column to update workflow.</span>
+                  <span className="sm:hidden">Tap a card to view; swipe horizontally to browse stages.</span>
                 </div>
-                <div className="flex gap-4 overflow-x-auto pb-3">
+                <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-3 sm:mx-0 sm:snap-none sm:px-0">
                   {ORDER_STATUS_OPTIONS.map((column) => (
                     <OrderKanbanColumn
                       key={column.value}
@@ -1537,7 +1788,7 @@ export function OrderProcessing() {
             isLoading={isLoading}
             emptyMessage="No orders found."
             renderActions={(order) => (
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
                   className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"

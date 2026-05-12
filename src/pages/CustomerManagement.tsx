@@ -41,9 +41,9 @@ export function CustomerManagement() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Customers</h1>
-        <Button onClick={() => navigate('/dashboard/customers/new')}>
+      <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl font-bold text-slate-800 sm:text-2xl">Customers</h1>
+        <Button className="w-full sm:w-auto" onClick={() => navigate('/dashboard/customers/new')}>
           <FiPlus className="mr-1.5 inline-block size-4" /> Add Customer
         </Button>
       </div>

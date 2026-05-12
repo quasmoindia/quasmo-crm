@@ -74,9 +74,9 @@ export function DataTable<T extends object>({
           {title && (
             <h2 className="text-lg font-semibold text-slate-800">{title}</h2>
           )}
-          <div className="flex flex-1 flex-wrap items-end gap-3">
+          <div className="flex w-full flex-1 flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-end">
             {search && (
-              <div className="min-w-[200px] flex-1">
+              <div className="min-w-0 flex-1 sm:min-w-[200px]">
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Search
                 </label>
@@ -91,7 +91,7 @@ export function DataTable<T extends object>({
                     }
                   }}
                   placeholder={search.placeholder ?? 'Search...'}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#305dff] focus:outline-none focus:ring-1 focus:ring-[#305dff]"
                 />
               </div>
             )}
@@ -100,6 +100,7 @@ export function DataTable<T extends object>({
               <Button
                 type="button"
                 variant="outline"
+                className="w-full sm:w-auto"
                 onClick={() => {
                   const rows = exportCsv.getRows();
                   if (rows.length) doExportCsv(rows, exportCsv.filename);
@@ -112,7 +113,7 @@ export function DataTable<T extends object>({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="-mx-4 overflow-x-auto rounded-none border-y border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)] sm:mx-0 sm:rounded-2xl sm:border-x">
         {isLoading ? (
           <div className="py-12 text-center text-sm text-slate-500">
             Loading...
@@ -122,19 +123,21 @@ export function DataTable<T extends object>({
             {emptyMessage}
           </div>
         ) : (
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
                 {columns.map((col) => (
                   <th
                     key={col.key}
-                    className="px-4 py-3 font-medium first:rounded-tl-lg last:rounded-tr-lg"
+                    className="whitespace-nowrap px-4 py-3 font-medium first:rounded-tl-lg last:rounded-tr-lg"
                   >
                     {col.label}
                   </th>
                 ))}
                 {renderActions && (
-                  <th className="px-4 py-3 text-right font-medium">Actions</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                    Actions
+                  </th>
                 )}
               </tr>
             </thead>
@@ -142,7 +145,7 @@ export function DataTable<T extends object>({
               {data.map((row) => (
                 <tr
                   key={rowKey(row)}
-                  className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50"
+                  className="border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50/50"
                 >
                   {columns.map((col) => (
                     <td key={col.key} className="px-4 py-3 text-slate-800">
@@ -187,7 +190,7 @@ export function DataTable<T extends object>({
                   onClick={() => pagination.onPageChange(item)}
                   className={`h-9 min-w-9 rounded-lg px-2.5 text-sm font-medium transition-colors ${
                     item === pagination.page
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-[#305dff] text-white'
                       : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
                   }`}
                   aria-current={item === pagination.page ? 'page' : undefined}
