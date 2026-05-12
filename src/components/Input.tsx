@@ -19,8 +19,8 @@ export const Input = forwardRef(function Input(
 
   const inputId = id ?? label.toLowerCase().replace(/\s/g, '-');
   const inputClassName = `
-    w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900
-    placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500
+    w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900
+    placeholder:text-slate-400 focus:border-[#305dff] focus:outline-none focus:ring-1 focus:ring-[#305dff]
     disabled:bg-slate-50 disabled:text-slate-500
     ${error ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
     ${showToggle ? 'pr-10' : ''}
@@ -47,7 +47,7 @@ export const Input = forwardRef(function Input(
           <button
             type="button"
             onClick={() => setPasswordVisible((v) => !v)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 disabled:pointer-events-none"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#305dff] focus:ring-offset-0 disabled:pointer-events-none"
             tabIndex={-1}
             aria-label={passwordVisible ? 'Hide password' : 'Show password'}
             title={passwordVisible ? 'Hide password' : 'Show password'}

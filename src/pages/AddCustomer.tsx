@@ -49,12 +49,12 @@ export function AddCustomer() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Add Customer</h1>
-          <p className="mt-1 text-sm text-slate-500">Create a new customer profile</p>
+          <h1 className="text-xl font-bold text-slate-800 sm:text-2xl">Add Customer</h1>
+          <p className="mt-1 text-xs text-slate-500 sm:text-sm">Create a new customer profile</p>
         </div>
-        <Button variant="outline" onClick={() => navigate('/dashboard/customers')}>
+        <Button variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/dashboard/customers')}>
           <FiArrowLeft className="mr-1.5 inline size-4" />
           Back to Customers
         </Button>

@@ -173,7 +173,7 @@ export function AddProduct() {
   return (
     <div className="mx-auto max-w-5xl">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <button
@@ -186,10 +186,10 @@ export function AddProduct() {
             <span>›</span>
             <span className="text-slate-700">New</span>
           </div>
-          <h1 className="mt-2 text-2xl font-bold text-slate-800">Add New Product</h1>
-          <p className="mt-1 text-sm text-slate-500">Complete product information</p>
+          <h1 className="mt-2 text-xl font-bold text-slate-800 sm:text-2xl">Add New Product</h1>
+          <p className="mt-1 text-xs text-slate-500 sm:text-sm">Complete product information</p>
         </div>
-        <Button variant="outline" onClick={() => navigate('/dashboard/products')}>
+        <Button variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/dashboard/products')}>
           <FiArrowLeft className="size-4" />
           Back
         </Button>
