@@ -36,6 +36,7 @@ import {
   uploadSignaturePresetImageApi,
 } from '../api/signaturePresets';
 import { useCurrentUser } from '../api/auth';
+import { useDraftPersister, formatDraftSavedAt } from '../utils/useDraftPersister';
 import type { TaxInvoice, TaxInvoiceLineItem, TaxInvoiceLineItemSuggestion } from '../types/taxInvoice';
 import type { Lead } from '../types/lead';
 import type { TaxDocumentKind } from '../types/taxDocumentKind';
@@ -852,23 +853,40 @@ function InvoiceEditorModal({
       setSigRemove({ signature: false, stamp: false, digitalSignature: false });
       setLeadQuery('');
       setLeadMenuOpen(false);
-    } else if (!invoiceId) {
-      setF({
-        ...DEFAULT_FORM,
-        documentKind: 'tax_invoice',
-        bankAccountId: '',
-        signaturePresetId: '',
-        shipSameAsBill: false,
-        invoiceNo: '',
-        items: [{ ...EMPTY_LINE, hsnSac: '90118000' }],
-      });
-      lastGrandTotalRef.current = null;
-      setSigFiles({ signature: null, stamp: null, digitalSignature: null });
-      setSigRemove({ signature: false, stamp: false, digitalSignature: false });
-      setLeadQuery('');
-      setLeadMenuOpen(false);
     }
+    // Create flow: the draft hook below handles initial population (either restored
+    // from localStorage or the DEFAULT_FORM already set in useState).
   }, [invoiceId, existing]);
+
+  const { data: authData } = useCurrentUser();
+  const myUserIdForDraft = authData?.user?.id;
+  const { restoredAt: draftRestoredAt, clear: clearInvoiceDraft } = useDraftPersister<TaxInvoiceEditorForm>({
+    key: `invoice-create-draft:${myUserIdForDraft ?? 'anon'}`,
+    enabled: !invoiceId,
+    snapshot: f,
+    onRestore: (data) => {
+      setF((prev) => ({ ...prev, ...data }));
+      lastGrandTotalRef.current = null;
+    },
+  });
+
+  function discardInvoiceDraft() {
+    clearInvoiceDraft();
+    setF({
+      ...DEFAULT_FORM,
+      documentKind: 'tax_invoice',
+      bankAccountId: '',
+      signaturePresetId: '',
+      shipSameAsBill: false,
+      invoiceNo: '',
+      items: [{ ...EMPTY_LINE, hsnSac: '90118000' }],
+    });
+    lastGrandTotalRef.current = null;
+    setSigFiles({ signature: null, stamp: null, digitalSignature: null });
+    setSigRemove({ signature: false, stamp: false, digitalSignature: false });
+    setLeadQuery('');
+    setLeadMenuOpen(false);
+  }
 
   useEffect(() => {
     if (!leadMenuOpen) return;
@@ -1090,6 +1108,8 @@ function InvoiceEditorModal({
           ...(signaturePresetId ? { signaturePresetId } : {}),
         });
         targetId = created._id;
+        // Successful create → wipe the create-flow draft so the next "New document" starts blank.
+        clearInvoiceDraft();
       }
       const hasSigUpload =
         !!sigFiles.signature || !!sigFiles.stamp || !!sigFiles.digitalSignature;
@@ -1146,6 +1166,24 @@ function InvoiceEditorModal({
           </button>
         </div>
         <form onSubmit={(e) => void handleSubmit(e)} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+          {!invoiceId && draftRestoredAt && (
+            <div
+              className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-100 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between"
+              role="status"
+            >
+              <span>
+                Draft restored from{' '}
+                <span className="font-medium">{formatDraftSavedAt(draftRestoredAt)}</span>. Keep editing — your changes are auto-saved.
+              </span>
+              <button
+                type="button"
+                onClick={discardInvoiceDraft}
+                className="self-start rounded-md border border-amber-200 bg-white px-2 py-1 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 sm:self-auto"
+              >
+                Discard draft
+              </button>
+            </div>
+          )}
           <section className="mb-6 space-y-3">
             <h3 className="text-sm font-semibold text-slate-700">Seller (your company)</h3>
             <div className="grid gap-3 sm:grid-cols-2">

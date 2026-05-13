@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
+import { useMemo, useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { FiList, FiGrid, FiUpload, FiDownload, FiFile, FiMessageCircle, FiEye } from 'react-icons/fi';
+import { useDraftPersister, formatDraftSavedAt } from '../utils/useDraftPersister';
 import {
   DndContext,
   type DragEndEvent,
@@ -822,6 +823,48 @@ function CreateLeadModal({
   const users = usersData?.data ?? [];
   const myUserId = auth?.user?.id;
 
+  const draftSnapshot = useMemo(
+    () => ({ name, phone, email, company, address, gstNumber, status, source, notes, assignedTo }),
+    [name, phone, email, company, address, gstNumber, status, source, notes, assignedTo]
+  );
+
+  function resetLeadFields() {
+    setName('');
+    setPhone('');
+    setEmail('');
+    setCompany('');
+    setAddress('');
+    setGstNumber('');
+    setStatus('new');
+    setSource('');
+    setNotes('');
+    setAssignedTo('');
+    setError(null);
+  }
+
+  const { restoredAt, clear: clearDraft } = useDraftPersister<typeof draftSnapshot>({
+    key: `lead-create-draft:${myUserId ?? 'anon'}`,
+    enabled: true,
+    snapshot: draftSnapshot,
+    onRestore: (d) => {
+      if (typeof d.name === 'string') setName(d.name);
+      if (typeof d.phone === 'string') setPhone(d.phone);
+      if (typeof d.email === 'string') setEmail(d.email);
+      if (typeof d.company === 'string') setCompany(d.company);
+      if (typeof d.address === 'string') setAddress(d.address);
+      if (typeof d.gstNumber === 'string') setGstNumber(d.gstNumber);
+      if (typeof d.status === 'string') setStatus(d.status as LeadStatus);
+      if (typeof d.source === 'string') setSource(d.source);
+      if (typeof d.notes === 'string') setNotes(d.notes);
+      if (typeof d.assignedTo === 'string') setAssignedTo(d.assignedTo);
+    },
+  });
+
+  function discardDraft() {
+    clearDraft();
+    resetLeadFields();
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -845,7 +888,14 @@ function CreateLeadModal({
       notes: notes.trim() || undefined,
       assignedTo: isAdmin ? assignedTo || undefined : myUserId,
     };
-    mutation.mutate(payload, { onSuccess, onError: (err: Error) => setError(err.message) });
+    mutation.mutate(payload, {
+      onSuccess: () => {
+        clearDraft();
+        resetLeadFields();
+        onSuccess();
+      },
+      onError: (err: Error) => setError(err.message),
+    });
   }
 
   return (
@@ -885,6 +935,23 @@ function CreateLeadModal({
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6 sm:py-6">
+            {restoredAt && (
+              <div
+                className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-100 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between"
+                role="status"
+              >
+                <span>
+                  Draft restored from <span className="font-medium">{formatDraftSavedAt(restoredAt)}</span>. Keep editing — your changes are auto-saved.
+                </span>
+                <button
+                  type="button"
+                  onClick={discardDraft}
+                  className="self-start rounded-md border border-amber-200 bg-white px-2 py-1 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 sm:self-auto"
+                >
+                  Discard draft
+                </button>
+              </div>
+            )}
             {error && (
               <div className="mb-5 rounded-xl border border-red-100 bg-red-50/90 px-4 py-3 text-sm text-red-800" role="alert">
                 {error}

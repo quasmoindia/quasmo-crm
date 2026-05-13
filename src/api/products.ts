@@ -101,6 +101,17 @@ export function createCategoryApi(payload: { name: string; parent?: string | nul
   return post<ProductCategory>(`${PRODUCTS_BASE}/categories`, payload);
 }
 
+export function updateCategoryApi(
+  id: string,
+  payload: { name?: string; description?: string; isActive?: boolean }
+) {
+  return patch<ProductCategory>(`${PRODUCTS_BASE}/categories/${id}`, payload);
+}
+
+export function deleteCategoryApi(id: string) {
+  return del<{ message?: string }>(`${PRODUCTS_BASE}/categories/${id}`);
+}
+
 // ── React Query hooks ──
 
 export function useProductsList(params: {
@@ -204,6 +215,32 @@ export function useCreateCategory() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createCategoryApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: categoriesQueryKey });
+    },
+  });
+}
+
+export function useUpdateCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: { name?: string; description?: string; isActive?: boolean };
+    }) => updateCategoryApi(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: categoriesQueryKey });
+    },
+  });
+}
+
+export function useDeleteCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteCategoryApi,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: categoriesQueryKey });
     },

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiPlus, FiTrash2, FiUpload, FiPackage } from 'react-icons/fi';
+import { FiArrowLeft, FiEdit2, FiPlus, FiTrash2, FiUpload, FiPackage } from 'react-icons/fi';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
@@ -9,7 +9,10 @@ import {
   useCategoryTree,
   useSubCategories,
   useCreateCategory,
+  useUpdateCategory,
+  useDeleteCategory,
 } from '../api/products';
+import { useCurrentUser } from '../api/auth';
 import type {
   ProductStatus,
   ProductUnit,
@@ -21,10 +24,18 @@ import {
   GST_RATE_OPTIONS,
 } from '../types/product';
 
+type CategoryDialog =
+  | { mode: 'create'; parent: string | null }
+  | { mode: 'edit'; id: string; parent: string | null };
+
 export function AddProduct() {
   const navigate = useNavigate();
   const createMutation = useCreateProduct();
   const createCategoryMutation = useCreateCategory();
+  const updateCategoryMutation = useUpdateCategory();
+  const deleteCategoryMutation = useDeleteCategory();
+  const { data: authData } = useCurrentUser();
+  const isAdmin = authData?.user?.role === 'admin';
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Form state ──
@@ -59,10 +70,17 @@ export function AddProduct() {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
-  // New category dialog
-  const [showNewCategory, setShowNewCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategoryParent, setNewCategoryParent] = useState<string | null>(null);
+  // Category create/edit dialog
+  const [categoryDialog, setCategoryDialog] = useState<CategoryDialog | null>(null);
+  const [categoryDialogName, setCategoryDialogName] = useState('');
+  const [categoryDialogError, setCategoryDialogError] = useState<string | null>(null);
+
+  // Category delete confirm
+  const [categoryDeleteTarget, setCategoryDeleteTarget] = useState<
+    | { id: string; name: string; parent: string | null }
+    | null
+  >(null);
+  const [categoryDeleteError, setCategoryDeleteError] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -103,23 +121,71 @@ export function AddProduct() {
     setImagePreviews((prev) => prev.filter((_, i) => i !== index));
   }
 
-  async function handleCreateCategory() {
-    if (!newCategoryName.trim()) return;
+  function openCreateCategoryDialog(parent: string | null) {
+    setCategoryDialog({ mode: 'create', parent });
+    setCategoryDialogName('');
+    setCategoryDialogError(null);
+  }
+
+  function openEditCategoryDialog(id: string, currentName: string, parent: string | null) {
+    setCategoryDialog({ mode: 'edit', id, parent });
+    setCategoryDialogName(currentName);
+    setCategoryDialogError(null);
+  }
+
+  function closeCategoryDialog() {
+    setCategoryDialog(null);
+    setCategoryDialogName('');
+    setCategoryDialogError(null);
+  }
+
+  async function handleSaveCategory() {
+    if (!categoryDialog) return;
+    const trimmed = categoryDialogName.trim();
+    if (!trimmed) {
+      setCategoryDialogError('Name is required');
+      return;
+    }
+    setCategoryDialogError(null);
     try {
-      const result = await createCategoryMutation.mutateAsync({
-        name: newCategoryName.trim(),
-        parent: newCategoryParent,
-      });
-      if (newCategoryParent) {
-        setSubCategoryId(result._id);
+      if (categoryDialog.mode === 'create') {
+        const result = await createCategoryMutation.mutateAsync({
+          name: trimmed,
+          parent: categoryDialog.parent,
+        });
+        if (categoryDialog.parent) {
+          setSubCategoryId(result._id);
+        } else {
+          setCategoryId(result._id);
+        }
       } else {
-        setCategoryId(result._id);
+        await updateCategoryMutation.mutateAsync({
+          id: categoryDialog.id,
+          payload: { name: trimmed },
+        });
       }
-      setShowNewCategory(false);
-      setNewCategoryName('');
-      setNewCategoryParent(null);
-    } catch {
-      // error shown via mutation
+      closeCategoryDialog();
+    } catch (err) {
+      setCategoryDialogError(err instanceof Error ? err.message : 'Failed to save category');
+    }
+  }
+
+  async function handleConfirmDeleteCategory() {
+    if (!categoryDeleteTarget) return;
+    setCategoryDeleteError(null);
+    try {
+      await deleteCategoryMutation.mutateAsync(categoryDeleteTarget.id);
+      if (categoryDeleteTarget.parent === null) {
+        if (categoryId === categoryDeleteTarget.id) {
+          setCategoryId('');
+          setSubCategoryId('');
+        }
+      } else if (subCategoryId === categoryDeleteTarget.id) {
+        setSubCategoryId('');
+      }
+      setCategoryDeleteTarget(null);
+    } catch (err) {
+      setCategoryDeleteError(err instanceof Error ? err.message : 'Failed to delete category');
     }
   }
 
@@ -226,20 +292,51 @@ export function AddProduct() {
           <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
             {/* Category */}
             <div>
-              <div className="mb-1 flex items-center justify-between">
+              <div className="mb-1 flex items-center justify-between gap-2">
                 <label className="block text-sm font-medium text-slate-700">Category *</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewCategoryParent(null);
-                    setNewCategoryName('');
-                    setShowNewCategory(true);
-                  }}
-                  className="flex items-center gap-0.5 text-xs font-medium text-indigo-600 hover:text-indigo-800"
-                >
-                  <FiPlus className="size-3" />
-                  New
-                </button>
+                <div className="flex items-center gap-2">
+                  {categoryId && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const c = rootCategories.find((r) => r._id === categoryId);
+                          if (c) openEditCategoryDialog(c._id, c.name, null);
+                        }}
+                        className="flex items-center gap-0.5 text-xs font-medium text-slate-600 hover:text-indigo-700"
+                        title="Rename category"
+                      >
+                        <FiEdit2 className="size-3" />
+                        Edit
+                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const c = rootCategories.find((r) => r._id === categoryId);
+                            if (c) {
+                              setCategoryDeleteTarget({ id: c._id, name: c.name, parent: null });
+                              setCategoryDeleteError(null);
+                            }
+                          }}
+                          className="flex items-center gap-0.5 text-xs font-medium text-rose-600 hover:text-rose-800"
+                          title="Delete category"
+                        >
+                          <FiTrash2 className="size-3" />
+                          Delete
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openCreateCategoryDialog(null)}
+                    className="flex items-center gap-0.5 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                  >
+                    <FiPlus className="size-3" />
+                    New
+                  </button>
+                </div>
               </div>
               <select
                 value={categoryId}
@@ -260,22 +357,53 @@ export function AddProduct() {
 
             {/* Sub-Category */}
             <div>
-              <div className="mb-1 flex items-center justify-between">
+              <div className="mb-1 flex items-center justify-between gap-2">
                 <label className="block text-sm font-medium text-slate-700">Sub-Category</label>
-                {categoryId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewCategoryParent(categoryId);
-                      setNewCategoryName('');
-                      setShowNewCategory(true);
-                    }}
-                    className="flex items-center gap-0.5 text-xs font-medium text-indigo-600 hover:text-indigo-800"
-                  >
-                    <FiPlus className="size-3" />
-                    New
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {categoryId && subCategoryId && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const c = subCategories.find((r) => r._id === subCategoryId);
+                          if (c) openEditCategoryDialog(c._id, c.name, categoryId);
+                        }}
+                        className="flex items-center gap-0.5 text-xs font-medium text-slate-600 hover:text-indigo-700"
+                        title="Rename sub-category"
+                      >
+                        <FiEdit2 className="size-3" />
+                        Edit
+                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const c = subCategories.find((r) => r._id === subCategoryId);
+                            if (c) {
+                              setCategoryDeleteTarget({ id: c._id, name: c.name, parent: categoryId });
+                              setCategoryDeleteError(null);
+                            }
+                          }}
+                          className="flex items-center gap-0.5 text-xs font-medium text-rose-600 hover:text-rose-800"
+                          title="Delete sub-category"
+                        >
+                          <FiTrash2 className="size-3" />
+                          Delete
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {categoryId && (
+                    <button
+                      type="button"
+                      onClick={() => openCreateCategoryDialog(categoryId)}
+                      className="flex items-center gap-0.5 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      <FiPlus className="size-3" />
+                      New
+                    </button>
+                  )}
+                </div>
               </div>
               <select
                 value={subCategoryId}
@@ -568,37 +696,104 @@ export function AddProduct() {
         </div>
       </form>
 
-      {/* ── New Category Modal ── */}
-      {showNewCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      {/* ── Category create / edit modal ── */}
+      {categoryDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeCategoryDialog();
+          }}
+        >
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
             <h3 className="text-lg font-semibold text-slate-800">
-              {newCategoryParent ? 'Add Sub-Category' : 'Add Category'}
+              {categoryDialog.mode === 'edit'
+                ? categoryDialog.parent
+                  ? 'Rename Sub-Category'
+                  : 'Rename Category'
+                : categoryDialog.parent
+                ? 'Add Sub-Category'
+                : 'Add Category'}
             </h3>
             <div className="mt-4">
               <Input
                 label="Name"
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                placeholder={newCategoryParent ? 'Sub-category name' : 'Category name'}
-                disabled={createCategoryMutation.isPending}
+                value={categoryDialogName}
+                onChange={(e) => setCategoryDialogName(e.target.value)}
+                placeholder={categoryDialog.parent ? 'Sub-category name' : 'Category name'}
+                disabled={createCategoryMutation.isPending || updateCategoryMutation.isPending}
+                autoFocus
               />
             </div>
-            {createCategoryMutation.isError && (
-              <p className="mt-2 text-sm text-red-600">
-                {(createCategoryMutation.error as Error).message}
+            {categoryDialogError && (
+              <p className="mt-2 text-sm text-red-600" role="alert">
+                {categoryDialogError}
               </p>
             )}
             <div className="mt-6 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setShowNewCategory(false)}>
+              <Button
+                variant="outline"
+                onClick={closeCategoryDialog}
+                disabled={createCategoryMutation.isPending || updateCategoryMutation.isPending}
+              >
                 Cancel
               </Button>
               <Button
-                onClick={handleCreateCategory}
-                loading={createCategoryMutation.isPending}
-                disabled={!newCategoryName.trim()}
+                onClick={handleSaveCategory}
+                loading={createCategoryMutation.isPending || updateCategoryMutation.isPending}
+                disabled={!categoryDialogName.trim()}
               >
-                Create
+                {categoryDialog.mode === 'edit' ? 'Save' : 'Create'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Category delete confirm ── */}
+      {categoryDeleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setCategoryDeleteTarget(null);
+          }}
+        >
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-800">
+              Delete {categoryDeleteTarget.parent ? 'Sub-Category' : 'Category'}?
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Are you sure you want to delete{' '}
+              <span className="font-medium text-slate-900">{categoryDeleteTarget.name}</span>? This action
+              cannot be undone.
+              {!categoryDeleteTarget.parent && (
+                <span className="mt-2 block text-xs text-slate-500">
+                  Categories with sub-categories or assigned to products cannot be deleted.
+                </span>
+              )}
+            </p>
+            {categoryDeleteError && (
+              <p className="mt-3 text-sm text-red-600" role="alert">
+                {categoryDeleteError}
+              </p>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setCategoryDeleteTarget(null)}
+                disabled={deleteCategoryMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmDeleteCategory}
+                loading={deleteCategoryMutation.isPending}
+                className="bg-rose-600 hover:bg-rose-700 focus:ring-rose-500"
+              >
+                Delete
               </Button>
             </div>
           </div>
