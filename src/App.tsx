@@ -10,6 +10,7 @@ import { RoleManagement } from './pages/RoleManagement';
 import { ComplaintManagement } from './pages/ComplaintManagement';
 import { LeadManagement } from './pages/LeadManagement';
 import { TaxInvoiceManagement } from './pages/TaxInvoiceManagement';
+import { TenderManagement } from './pages/TenderManagement';
 import { ExpenseManagement } from './pages/ExpenseManagement';
 import { ProductList } from './pages/ProductList';
 import { AddProduct } from './pages/AddProduct';
@@ -60,6 +61,7 @@ function App() {
             <Route path="users" element={<UserManagement />} />
             <Route path="roles" element={<RoleManagement />} />
             <Route path="complaints" element={<ComplaintManagement />} />
+            <Route path="tenders" element={<TenderManagement />} />
             <Route path="leads" element={<LeadManagement />} />
             <Route path="invoices" element={<TaxInvoiceManagement />} />
             <Route path="expenses" element={<ExpenseManagement />} />

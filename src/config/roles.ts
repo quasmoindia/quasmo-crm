@@ -6,7 +6,7 @@
 /** Role id -> module ids ('*' = all modules) */
 export const ROLE_MODULE_MAP: Record<string, readonly string[]> = {
   admin: ['*'],
-  user: ['dashboard', 'complaints', 'leads', 'invoices', 'expenses', 'products', 'customers', 'orders', 'documents'],
+  user: ['dashboard', 'complaints', 'leads', 'invoices', 'expenses', 'products', 'customers', 'orders', 'documents', 'tenders'],
   viewer: ['dashboard'],
   // content_writer: ['dashboard', 'content'],
   // sales_manager: ['dashboard', 'sales', 'leads'],
@@ -29,6 +29,7 @@ export const MODULE_LABELS: Record<string, string> = {
   expenses: 'Expenses',
   documents: 'Documents',
   attendance: 'Employee attendance',
+  tenders: 'Tender management',
 };
 
 /** Role id -> display label (fallback if API not used) */
@@ -62,6 +63,7 @@ export const NAV_MODULES: NavModule[] = [
   { moduleId: 'products', label: 'Products', path: '/dashboard/products', end: false },
   { moduleId: 'orders', label: 'Order Management', path: '/dashboard/orders', end: false },
   { moduleId: 'complaints', label: 'Complaint management', path: '/dashboard/complaints', end: false },
+  { moduleId: 'tenders', label: 'Tender management', path: '/dashboard/tenders', end: false },
   { moduleId: 'expenses', label: 'Expenses', path: '/dashboard/expenses', end: false },
   { moduleId: 'documents', label: 'Documents', path: '/dashboard/documents', end: false },
   { moduleId: 'attendance', label: 'Employee attendance', path: '/dashboard/attendance', end: false },

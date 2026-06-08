@@ -19,6 +19,7 @@ import {
   FiUserCheck,
   FiX,
   FiClock,
+  FiBriefcase,
 } from 'react-icons/fi';
 import { clearStoredToken, useCurrentUser } from '../api/auth';
 import {
@@ -30,7 +31,7 @@ import { useKioskMode } from '../hooks/useKioskMode';
 
 const NAV_SECTIONS = [
   { title: null, moduleIds: ['dashboard'] },
-  { title: 'Sales & CRM', moduleIds: ['leads', 'customers', 'complaints'] },
+  { title: 'Sales & CRM', moduleIds: ['leads', 'customers', 'complaints', 'tenders'] },
   { title: 'Products & Inventory', moduleIds: ['products', 'orders', 'documents'] },
   { title: 'HR & Attendance', moduleIds: ['attendance'] },
   { title: 'Operations', moduleIds: ['invoices', 'expenses', 'users', 'roles'] },
@@ -41,6 +42,7 @@ const navIconsByModuleId: Record<string, IconType> = {
   leads: FiBarChart2,
   customers: FiUsers,
   complaints: FiAlertCircle,
+  tenders: FiBriefcase,
   products: FiBox,
   orders: FiShoppingCart,
   documents: FiFileText,
