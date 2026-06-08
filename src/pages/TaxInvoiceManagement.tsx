@@ -6,6 +6,7 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
+import { TableRowActions } from '../components/TableRowActions';
 import {
   useTaxInvoicesList,
   useTaxInvoice,
@@ -40,7 +41,7 @@ import { useDraftPersister, formatDraftSavedAt } from '../utils/useDraftPersiste
 import type { TaxInvoice, TaxInvoiceLineItem, TaxInvoiceLineItemSuggestion } from '../types/taxInvoice';
 import type { Lead } from '../types/lead';
 import type { TaxDocumentKind } from '../types/taxDocumentKind';
-import { DOCUMENT_KIND_OPTIONS } from '../types/taxDocumentKind';
+import { DOCUMENT_KIND_OPTIONS, documentKindUiLabels, isPurchaseOrder } from '../types/taxDocumentKind';
 import type { BankAccount } from '../types/bankAccount';
 import type { SignaturePreset, SignaturePresetSlot } from '../types/signaturePreset';
 
@@ -263,6 +264,28 @@ function kindLabel(kind: string | undefined) {
   return DOCUMENT_KIND_OPTIONS.find((o) => o.value === kind)?.label ?? 'Tax invoice';
 }
 
+function documentKindBadgeClass(kind: string | undefined): string {
+  switch (kind) {
+    case 'proforma':
+      return 'bg-amber-50 text-amber-800 ring-amber-200/70';
+    case 'quotation':
+      return 'bg-sky-50 text-sky-800 ring-sky-200/70';
+    case 'purchase_order':
+      return 'bg-emerald-50 text-emerald-800 ring-emerald-200/70';
+    default:
+      return 'bg-indigo-50 text-indigo-800 ring-indigo-200/70';
+  }
+}
+
+function formatDocDate(iso?: string): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 function invoiceToForm(inv: TaxInvoice): TaxInvoiceEditorForm {
   const bid = inv.bankAccountId;
   const bankIdStr = typeof bid === 'object' && bid?._id ? bid._id : (bid as string) || '';
@@ -329,11 +352,15 @@ function formToPayload(
 ): Record<string, unknown> {
   const leadPayload =
     opts?.clearLeadIfEmpty ? (f.leadId.trim() ? f.leadId.trim() : null) : f.leadId.trim() || undefined;
-  const bankPayload = opts?.clearLeadIfEmpty
-    ? f.bankAccountId.trim()
+  const bankPayload = isPurchaseOrder(f.documentKind)
+    ? opts?.clearLeadIfEmpty
+      ? null
+      : undefined
+    : opts?.clearLeadIfEmpty
       ? f.bankAccountId.trim()
-      : null
-    : f.bankAccountId.trim() || undefined;
+        ? f.bankAccountId.trim()
+        : null
+      : f.bankAccountId.trim() || undefined;
   const signaturePresetPayload = opts?.clearLeadIfEmpty
     ? f.signaturePresetId.trim()
       ? f.signaturePresetId.trim()
@@ -378,12 +405,23 @@ function formToPayload(
     })),
     gstRate: Number(f.gstRate) || 0,
     isRoundOff: Boolean(f.isRoundOff),
-    bankName: f.bankName,
-    bankAccountNo: f.bankAccountNo,
-    bankIfsc: f.bankIfsc,
-    bankBranch: f.bankBranch,
-    bankUpiId: f.bankUpiId,
-    bankQrUrl: f.bankQrUrl,
+    ...(isPurchaseOrder(f.documentKind)
+      ? {
+          bankName: '',
+          bankAccountNo: '',
+          bankIfsc: '',
+          bankBranch: '',
+          bankUpiId: '',
+          bankQrUrl: '',
+        }
+      : {
+          bankName: f.bankName,
+          bankAccountNo: f.bankAccountNo,
+          bankIfsc: f.bankIfsc,
+          bankBranch: f.bankBranch,
+          bankUpiId: f.bankUpiId,
+          bankQrUrl: f.bankQrUrl,
+        }),
     termsAndConditions: f.termsAndConditions,
     amountInWords: f.amountInWords.trim() || undefined,
     issuerStampUrl: f.issuerStampUrl.trim(),
@@ -397,15 +435,20 @@ function formatMoney(n: number) {
 }
 
 /** Build a clean PDF filename from bill-to name and invoice number. */
-function buildInvoiceFilename(billedToName?: string, invoiceNo?: string): string {
+function buildInvoiceFilename(
+  billedToName?: string,
+  invoiceNo?: string,
+  documentKind?: string
+): string {
   const safe = (s?: string) =>
     (s ?? '').trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_').replace(/^_+|_+$/g, '');
   const namePart = safe(billedToName);
   const noPart = safe(invoiceNo);
+  const prefix = isPurchaseOrder(documentKind) ? 'Purchase_Order' : 'Invoice';
   if (namePart && noPart) return `${namePart}_${noPart}.pdf`;
   if (namePart) return `${namePart}.pdf`;
   if (noPart) return `${noPart}.pdf`;
-  return 'Invoice.pdf';
+  return `${prefix}.pdf`;
 }
 
 export function TaxInvoiceManagement() {
@@ -439,16 +482,24 @@ export function TaxInvoiceManagement() {
       key: 'kind',
       label: 'Type',
       render: (r: TaxInvoice) => (
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+        <span
+          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${documentKindBadgeClass(r.documentKind)}`}
+        >
           {kindLabel(r.documentKind)}
         </span>
       ),
     },
-    { key: 'invoiceNo', label: 'Doc #', render: (r: TaxInvoice) => <span className="font-medium">{r.invoiceNo}</span> },
+    {
+      key: 'invoiceNo',
+      label: 'Doc #',
+      render: (r: TaxInvoice) => (
+        <span className="font-mono text-xs font-semibold text-slate-800">{r.invoiceNo}</span>
+      ),
+    },
     {
       key: 'date',
       label: 'Date',
-      render: (r: TaxInvoice) => (r.invoiceDate ? new Date(r.invoiceDate).toLocaleDateString() : '—'),
+      render: (r: TaxInvoice) => <span className="text-slate-600">{formatDocDate(r.invoiceDate)}</span>,
     },
     {
       key: 'lead',
@@ -457,35 +508,63 @@ export function TaxInvoiceManagement() {
         const l = r.leadId;
         if (l && typeof l === 'object' && l !== null && 'name' in l) {
           const name = (l as { name?: string }).name?.trim();
-          if (name) return <span className="text-slate-800">{name}</span>;
+          if (name) {
+            return (
+              <span className="block max-w-[10rem] truncate text-slate-800" title={name}>
+                {name}
+              </span>
+            );
+          }
         }
         return <span className="text-slate-400">—</span>;
       },
     },
-    { key: 'billedTo', label: 'Billed to', render: (r: TaxInvoice) => r.billedToName || '—' },
+    {
+      key: 'billedTo',
+      label: 'Party',
+      render: (r: TaxInvoice) =>
+        r.billedToName ? (
+          <span className="block max-w-[12rem] truncate text-slate-800" title={r.billedToName}>
+            {r.billedToName}
+          </span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
     {
       key: 'total',
       label: 'Grand total',
-      render: (r: TaxInvoice) => <span className="font-mono text-sm">₹ {formatMoney(r.grandTotal ?? 0)}</span>,
-    },
-    {
-      key: 'actions',
-      label: '',
       render: (r: TaxInvoice) => (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className="text-indigo-600 hover:text-indigo-800" onClick={() => setPreviewId(r._id)}>
-            <FiEye className="mr-0.5 inline size-4" aria-hidden />
-            Preview
-          </button>
-          <button
-            type="button"
-            className="text-slate-700 hover:text-slate-900"
-            disabled={pdfLoadingId === r._id}
-            onClick={async () => {
+        <span className="font-mono text-sm font-medium tabular-nums text-slate-900">
+          ₹ {formatMoney(r.grandTotal ?? 0)}
+        </span>
+      ),
+    },
+  ];
+
+  function renderInvoiceActions(r: TaxInvoice) {
+    return (
+      <TableRowActions
+        items={[
+          {
+            key: 'preview',
+            label: 'Preview',
+            icon: FiEye,
+            variant: 'primary',
+            onClick: () => setPreviewId(r._id),
+          },
+          {
+            key: 'pdf',
+            label: 'Download PDF',
+            icon: FiDownload,
+            variant: 'default',
+            loading: pdfLoadingId === r._id,
+            disabled: pdfLoadingId === r._id,
+            onClick: async () => {
               setPdfLoadingId(r._id);
               try {
                 const { blob } = await downloadTaxInvoicePdfApi(r._id);
-                const filename = buildInvoiceFilename(r.billedToName, r.invoiceNo);
+                const filename = buildInvoiceFilename(r.billedToName, r.invoiceNo, r.documentKind);
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -497,24 +576,32 @@ export function TaxInvoiceManagement() {
               } finally {
                 setPdfLoadingId(null);
               }
-            }}
-          >
-            <FiDownload className="mr-0.5 inline size-4" aria-hidden />
-            PDF
-          </button>
-          <button type="button" className="text-indigo-600 hover:text-indigo-800" onClick={() => { setEditingId(r._id); setEditorOpen(true); }}>
-            <FiEdit2 className="mr-0.5 inline size-4" aria-hidden />
-            Edit
-          </button>
-          {isAdmin && (
-            <button type="button" className="text-red-600 hover:text-red-800" onClick={() => { if (confirm('Delete this invoice?')) void deleteMut.mutateAsync(r._id); }}>
-              <FiTrash2 className="inline size-4" aria-hidden />
-            </button>
-          )}
-        </div>
-      ),
-    },
-  ];
+            },
+          },
+          {
+            key: 'edit',
+            label: 'Edit',
+            icon: FiEdit2,
+            variant: 'primary',
+            onClick: () => {
+              setEditingId(r._id);
+              setEditorOpen(true);
+            },
+          },
+          {
+            key: 'delete',
+            label: 'Delete',
+            icon: FiTrash2,
+            variant: 'danger',
+            hidden: !isAdmin,
+            onClick: () => {
+              if (confirm('Delete this document?')) void deleteMut.mutateAsync(r._id);
+            },
+          },
+        ]}
+      />
+    );
+  }
 
   return (
     <div>
@@ -552,6 +639,7 @@ export function TaxInvoiceManagement() {
             columns={columns}
             data={invoices}
             rowKey={(r) => r._id}
+            renderActions={renderInvoiceActions}
             search={{
               value: searchInput,
               onChange: setSearchInput,
@@ -611,7 +699,7 @@ export function TaxInvoiceManagement() {
             try {
               const { blob } = await downloadTaxInvoicePdfApi(previewId);
               const inv = invoices.find((i) => i._id === previewId);
-              const filename = buildInvoiceFilename(inv?.billedToName, inv?.invoiceNo);
+              const filename = buildInvoiceFilename(inv?.billedToName, inv?.invoiceNo, inv?.documentKind);
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
@@ -922,6 +1010,7 @@ function InvoiceEditorModal({
   }, [f.leadId, leadSearchResults, existing?.leadId]);
 
   const busy = createMut.isPending || updateMut.isPending;
+  const uiLabels = documentKindUiLabels(f.documentKind);
 
   function setField<K extends keyof typeof f>(k: K, v: (typeof f)[K]) {
     setF((prev) => ({ ...prev, [k]: v }));
@@ -1230,7 +1319,7 @@ function InvoiceEditorModal({
             <p className="mb-3 max-w-xl text-xs text-slate-500">
               Search by <strong className="font-medium text-slate-600">name</strong>,{' '}
               <strong className="font-medium text-slate-600">phone</strong>, or{' '}
-              <strong className="font-medium text-slate-600">GSTIN</strong>, then pick a row to fill bill-to / ship-to from that lead.
+              <strong className="font-medium text-slate-600">GSTIN</strong>, then {uiLabels.leadHint}.
             </p>
             <div ref={leadComboRef} className="relative max-w-xl">
               {f.leadId ? (
@@ -1312,10 +1401,28 @@ function InvoiceEditorModal({
 
           <section className="mb-6">
             <label className="mb-1 block text-sm font-medium text-slate-700">Document type</label>
-            <p className="mb-2 text-xs text-slate-500">Same layout; only the title on the PDF changes (Tax invoice / Proforma / Quotation).</p>
+            <p className="mb-2 text-xs text-slate-500">
+              Same layout; title and labels on the PDF change by type (Tax invoice / Proforma / Quotation / Purchase order). Purchase orders omit bank &amp; UPI details.
+            </p>
             <select
               value={f.documentKind}
-              onChange={(e) => setField('documentKind', e.target.value as TaxDocumentKind)}
+              onChange={(e) => {
+                const kind = e.target.value as TaxDocumentKind;
+                setF((prev) => {
+                  const next = { ...prev, documentKind: kind };
+                  if (!isPurchaseOrder(kind)) return next;
+                  return {
+                    ...next,
+                    bankAccountId: '',
+                    bankName: '',
+                    bankAccountNo: '',
+                    bankIfsc: '',
+                    bankBranch: '',
+                    bankUpiId: '',
+                    bankQrUrl: '',
+                  };
+                });
+              }}
               disabled={busy}
               className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
@@ -1331,7 +1438,7 @@ function InvoiceEditorModal({
             <h3 className="sm:col-span-2 text-sm font-semibold text-slate-700">Document details</h3>
             <div className="max-w-xl">
               <Input
-                label="Document / invoice no. (auto)"
+                label={uiLabels.docNo}
                 value={f.invoiceNo}
                 readOnly
                 onChange={() => {}}
@@ -1340,10 +1447,10 @@ function InvoiceEditorModal({
               <p className="mt-1 text-xs text-slate-500">
                 {invoiceId
                   ? 'This number cannot be changed.'
-                  : 'Format: company prefix / type code / running number (e.g. QSMW/TI/01, QSMW/PF/01). Updates when you change document type; the server sets the final value when you create.'}
+                  : 'Format: company prefix / type code / running number (e.g. QSMW/TI/01, QSMW/PO/01). Updates when you change document type; the server sets the final value when you create.'}
               </p>
             </div>
-            <Input label="Invoice date" type="date" value={f.invoiceDate} onChange={(e) => setField('invoiceDate', e.target.value)} disabled={busy} />
+            <Input label={uiLabels.date} type="date" value={f.invoiceDate} onChange={(e) => setField('invoiceDate', e.target.value)} disabled={busy} />
             <Input label="Place of supply" value={f.placeOfSupply} onChange={(e) => setField('placeOfSupply', e.target.value)} disabled={busy} placeholder="e.g. Tamilnadu (33)" />
             <Input label="Transport" value={f.transport} onChange={(e) => setField('transport', e.target.value)} disabled={busy} />
             <Input label="Vehicle no." value={f.vehicleNo} onChange={(e) => setField('vehicleNo', e.target.value)} disabled={busy} />
@@ -1354,7 +1461,7 @@ function InvoiceEditorModal({
           </section>
 
           <section className="mb-6 grid gap-3 sm:grid-cols-2">
-            <h3 className="sm:col-span-2 text-sm font-semibold text-slate-700">Billed to / Shipped to</h3>
+            <h3 className="sm:col-span-2 text-sm font-semibold text-slate-700">{uiLabels.partySection}</h3>
             <div className="sm:col-span-2">
               <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
                 <input
@@ -1378,7 +1485,7 @@ function InvoiceEditorModal({
                   disabled={busy}
                   className="rounded border-slate-300"
                 />
-                Ship-to same as bill-to (GSTIN, name, address)
+                {uiLabels.shipSameAsBill}
               </label>
             </div>
             <div>
@@ -1403,7 +1510,7 @@ function InvoiceEditorModal({
                   onSuccess={applyGstLookupToBilledTo}
                 />
               </div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Billed to — name</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">{uiLabels.partyName}</label>
               <input
                 value={f.billedToName}
                 onChange={(e) => patchBilledTo({ billedToName: e.target.value })}
@@ -1619,6 +1726,7 @@ function InvoiceEditorModal({
             </div>
           </section>
 
+          {uiLabels.showBankDetails ? (
           <section className="mb-6 grid gap-3 sm:grid-cols-2">
             <h3 className="sm:col-span-2 text-sm font-semibold text-slate-700">Bank details</h3>
             <div className="sm:col-span-2">
@@ -1714,6 +1822,7 @@ function InvoiceEditorModal({
               ) : null}
             </div>
           </section>
+          ) : null}
 
           <section className="mb-6 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
             <h3 className="mb-1 text-sm font-semibold text-slate-700">Signatory images (optional)</h3>

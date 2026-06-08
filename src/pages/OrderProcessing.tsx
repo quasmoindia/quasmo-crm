@@ -15,6 +15,15 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
+import { SearchableSelect } from '../components/SearchableSelect';
+import {
+  ShippingDetailsFields,
+  hasAnyShippingInput,
+  shippingDetailsFromSnapshot,
+  shippingDetailsToPayload,
+  validateShippingDetails,
+  type ShippingDetailsValues,
+} from '../components/orders/ShippingDetailsFields';
 import {
   useOrdersList,
   useUpdateOrder,
@@ -642,10 +651,11 @@ function OrderDetailsModal({
   const updateOrderStatusMutation = useUpdateOrderStatus();
   const createCourierMutation = useCreateCourier();
   const { data: couriersData, refetch: refetchCouriers } = useCouriersList();
-  const { data: customersData } = useCustomersList({ limit: 200 });
-  const { data: productsData } = useProductsList({ limit: 200, page: 1 });
+  const { data: customersData, isLoading: loadingCustomers } = useCustomersList({ limit: 200, page: 1 });
+  const { data: productsData, isLoading: loadingProducts } = useProductsList({ limit: 500, page: 1 });
   const customers = customersData?.data ?? [];
   const products = productsData?.data ?? [];
+  const productById = useMemo(() => new Map(products.map((p) => [p._id, p])), [products]);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
 
   const [customerId, setCustomerId] = useState(order.customer?._id ?? '');
@@ -662,6 +672,9 @@ function OrderDetailsModal({
       notes: item.notes ?? '',
     }))
   );
+  const [shipping, setShipping] = useState<ShippingDetailsValues>(() =>
+    shippingDetailsFromSnapshot(order.shippingLabelSnapshot)
+  );
 
   const [documents, setDocuments] = useState<string[]>(order.documents ?? []);
   const [docError, setDocError] = useState<string | null>(null);
@@ -673,6 +686,29 @@ function OrderDetailsModal({
     setDocuments(order.documents ?? []);
     setDocError(null);
   }, [order._id, order.documents]);
+
+  useEffect(() => {
+    setShipping(shippingDetailsFromSnapshot(order.shippingLabelSnapshot));
+  }, [order._id, order.shippingLabelSnapshot?.savedAt]);
+
+  const selectedCustomer = useMemo(
+    () => customers.find((c) => c._id === customerId),
+    [customers, customerId]
+  );
+
+  const fillShippingFromCustomer = () => {
+    if (!selectedCustomer) return;
+    setShipping({
+      shipToName: selectedCustomer.name,
+      shipToPhone: selectedCustomer.phone ?? '',
+      shipToAddress: selectedCustomer.address ?? '',
+      labelCount: shipping.labelCount || '1',
+    });
+  };
+
+  const updateShipping = (field: keyof ShippingDetailsValues, value: string) => {
+    setShipping((prev) => ({ ...prev, [field]: value }));
+  };
 
   const docsBusy = uploadingDocs || removingDocUrl !== null;
 
@@ -729,6 +765,14 @@ function OrderDetailsModal({
     );
   };
 
+  function quantityForProductExcludingRow(excludeIndex: number, productId: string): number {
+    return items.reduce((sum, row, i) => {
+      if (i === excludeIndex || row.product !== productId) return sum;
+      const q = row.quantity;
+      return sum + (Number.isFinite(q) && q > 0 ? q : 0);
+    }, 0);
+  }
+
   const removeItem = (index: number) => {
     setItems((prev) => prev.filter((_, idx) => idx !== index));
   };
@@ -743,6 +787,9 @@ function OrderDetailsModal({
       }));
     if (!customerId) return alert('Please select customer');
     if (validItems.length === 0) return alert('Please keep at least one valid item');
+
+    const shippingError = validateShippingDetails(shipping);
+    if (shippingError) return alert(shippingError);
 
     try {
       let courierId: string | undefined;
@@ -778,6 +825,7 @@ function OrderDetailsModal({
           items: validItems,
           specificationNotes: specificationNotes.trim() || undefined,
           packingInstructions: packingInstructions.trim() || undefined,
+          shippingDetails: hasAnyShippingInput(shipping) ? shippingDetailsToPayload(shipping) : null,
         },
       });
 
@@ -898,6 +946,41 @@ function OrderDetailsModal({
               <p className="mb-1 mt-3 text-xs uppercase tracking-wide text-slate-500">Packing Instructions</p>
               <p className="whitespace-pre-wrap text-sm text-slate-700">{order.packingInstructions?.trim() || '—'}</p>
             </div>
+
+            {order.shippingLabelSnapshot && (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-2 text-sm font-semibold text-slate-800">Shipping Details</h3>
+                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Ship-to name</dt>
+                    <dd className="font-medium text-slate-900">{order.shippingLabelSnapshot.shipToName}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Phone</dt>
+                    <dd className="text-slate-800">{order.shippingLabelSnapshot.shipToPhone || '—'}</dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Address</dt>
+                    <dd className="whitespace-pre-wrap text-slate-800">{order.shippingLabelSnapshot.shipToAddress || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Labels</dt>
+                    <dd className="text-slate-800">{order.shippingLabelSnapshot.labelCount}</dd>
+                  </div>
+                </dl>
+                <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/80 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Package lines</p>
+                  <ul className="mt-1.5 list-inside list-disc text-sm text-slate-800">
+                    {order.shippingLabelSnapshot.packageLines.map((line, idx) => (
+                      <li key={idx}>
+                        {line.quantity}× {line.productName}
+                        {line.productCode ? <span className="text-slate-500"> ({line.productCode})</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
 
             {reachedReady && (
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
@@ -1065,20 +1148,21 @@ function OrderDetailsModal({
           <form onSubmit={handleSave} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6">
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-                <label className="mb-1 block text-sm font-medium text-slate-700">Customer *</label>
-                <select
+                <SearchableSelect
+                  label="Customer"
                   value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
+                  onChange={setCustomerId}
                   required
-                >
-                  <option value="">Select customer...</option>
-                  {customers.map((customer) => (
-                    <option key={customer._id} value={customer._id}>
-                      {customer.name} {customer.company ? `(${customer.company})` : ''} {customer.phone ? `- ${customer.phone}` : ''}
-                    </option>
-                  ))}
-                </select>
+                  loading={loadingCustomers}
+                  options={customers.map((customer) => ({
+                    value: customer._id,
+                    label: customer.name,
+                    meta: `${customer.phone || 'No phone'}${customer.company ? ` • ${customer.company}` : ''}`,
+                  }))}
+                  placeholder="Select customer..."
+                  searchPlaceholder="Search by name, phone, company..."
+                  emptyText="No customers found"
+                />
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
@@ -1089,33 +1173,68 @@ function OrderDetailsModal({
                   </Button>
                 </div>
                 <div className="space-y-3">
-                  {items.map((item, index) => (
+                  {items.map((item, index) => {
+                    const selectedProduct = item.product ? productById.get(item.product) : undefined;
+                    const warehouseStock = selectedProduct?.currentStock ?? 0;
+                    const unit = selectedProduct?.unit ?? 'Nos';
+                    const qtyReservedElsewhere = item.product
+                      ? quantityForProductExcludingRow(index, item.product)
+                      : 0;
+                    const remainingForThisLine = Math.max(0, warehouseStock - qtyReservedElsewhere);
+                    const lineQty = Number.isFinite(item.quantity) && item.quantity > 0 ? item.quantity : 0;
+                    const exceedsStock = Boolean(selectedProduct && lineQty > remainingForThisLine);
+
+                    return (
                     <div key={`${index}-${item.product}`} className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-7">
                       <div className="sm:col-span-4">
-                        <label className="mb-1 block text-xs font-medium text-slate-600">Product *</label>
-                        <select
+                        <SearchableSelect
+                          label="Product"
                           value={item.product}
-                          onChange={(e) => updateItem(index, 'product', e.target.value)}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none"
+                          onChange={(selected) => updateItem(index, 'product', selected)}
+                          loading={loadingProducts}
+                          options={products.map((product) => ({
+                            value: product._id,
+                            label: `${product.productCode} - ${product.productName}`,
+                            meta: `Available: ${product.currentStock ?? 0} ${product.unit}`,
+                          }))}
+                          placeholder="Select a product..."
+                          searchPlaceholder="Search by code, name, brand..."
+                          emptyText="No products found"
                           required
-                        >
-                          <option value="">Select product...</option>
-                          {products.map((product) => (
-                            <option key={product._id} value={product._id}>
-                              {product.productCode} - {product.productName}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </div>
                       <div className="sm:col-span-1">
                         <Input
                           label="Qty"
                           type="number"
                           min="1"
+                          max={remainingForThisLine > 0 ? remainingForThisLine : undefined}
                           value={item.quantity}
                           onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value || '0', 10))}
                           required
                         />
+                        {selectedProduct && (
+                          <p
+                            className={`mt-1.5 text-xs ${
+                              exceedsStock ? 'font-medium text-red-600' : 'text-slate-600'
+                            }`}
+                          >
+                            Available:{' '}
+                            <span className="font-semibold text-slate-800">{warehouseStock}</span> {unit}
+                            {qtyReservedElsewhere > 0 && (
+                              <>
+                                {' '}
+                                · <span className="text-slate-700">{remainingForThisLine}</span> left for
+                                this line ({qtyReservedElsewhere} in other rows)
+                              </>
+                            )}
+                            {exceedsStock && (
+                              <span className="block pt-0.5">
+                                Reduce quantity to {remainingForThisLine} or less.
+                              </span>
+                            )}
+                          </p>
+                        )}
                       </div>
                       <div className="sm:col-span-2">
                         <label className="mb-1 block text-xs font-medium text-slate-600">Product Notes</label>
@@ -1133,7 +1252,8 @@ function OrderDetailsModal({
                         </Button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1155,6 +1275,17 @@ function OrderDetailsModal({
                   rows={3}
                   placeholder="Instructions for packing team..."
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">Shipping Details</h3>
+                <ShippingDetailsFields
+                  values={shipping}
+                  onChange={updateShipping}
+                  onFillFromCustomer={selectedCustomer ? fillShippingFromCustomer : undefined}
+                  compact
+                  disabled={updateOrderMutation.isPending || updateOrderStatusMutation.isPending}
                 />
               </div>
 

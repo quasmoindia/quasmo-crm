@@ -61,6 +61,13 @@ export interface SaveShippingLabelPayload {
   labelCount: number;
 }
 
+export interface OrderShippingDetailsPayload {
+  shipToName: string;
+  shipToPhone?: string;
+  shipToAddress?: string;
+  labelCount: number;
+}
+
 export interface CreateOrderPayload {
   customer: string;
   specificationNotes?: string;
@@ -70,6 +77,7 @@ export interface CreateOrderPayload {
     quantity: number;
     notes?: string;
   }[];
+  shippingDetails?: OrderShippingDetailsPayload | null;
 }
 
 export interface UpdateOrderPayload {
@@ -81,4 +89,5 @@ export interface UpdateOrderPayload {
     quantity: number;
     notes?: string;
   }[];
+  shippingDetails?: OrderShippingDetailsPayload | null;
 }
