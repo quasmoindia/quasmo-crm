@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   FiAlertCircle,
   FiTrendingUp,
+  FiClock,
 } from 'react-icons/fi';
 import type { IconType } from 'react-icons';
 import { useCurrentUser } from '../api/auth';
@@ -14,6 +15,7 @@ import {
 import { listLeadsApi, leadsListKey, useLeadsList } from '../api/leads';
 import { Card } from '../components/Card';
 import { canAccessModule } from '../config/roles';
+import { useAttendanceDashboard } from '../api/attendance';
 import type { ComplaintStatus } from '../types/complaint';
 import { STATUS_OPTIONS } from '../types/complaint';
 import type { LeadStatus } from '../types/lead';
@@ -81,6 +83,9 @@ export function Dashboard() {
   const canUsers = canAccessModule(role, 'users', roleModules);
   const canInvoices = canAccessModule(role, 'invoices', roleModules);
   const canRoles = canAccessModule(role, 'roles', roleModules);
+  const canAttendance = canAccessModule(role, 'attendance', roleModules);
+
+  const { data: attendanceData, isLoading: attendanceLoading } = useAttendanceDashboard(canAttendance);
 
   const complaintsRecent = useComplaintsList({ page: 1, limit: 5 }, { enabled: canComplaints });
   const leadsRecent = useLeadsList({ page: 1, limit: 5 }, { enabled: canLeads });
@@ -117,7 +122,7 @@ export function Dashboard() {
   const recentLeads: Lead[] = leadsRecent.data?.data ?? [];
 
   const hasAnyModule =
-    canComplaints || canLeads || canUsers || canInvoices || canRoles;
+    canComplaints || canLeads || canUsers || canInvoices || canRoles || canAttendance;
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -158,6 +163,15 @@ export function Dashboard() {
               tone="green"
             />
           )}
+          {canAttendance && (
+            <StatTile
+              label="Present today"
+              value={attendanceLoading ? '…' : (attendanceData?.stats.present ?? 0)}
+              sub={`${attendanceData?.stats.absent ?? 0} absent · ${attendanceData?.workDate ?? 'today'}`}
+              icon={FiClock}
+              tone="blue"
+            />
+          )}
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)] sm:col-span-2 xl:col-span-2">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Quick links</p>
             <ul className="mt-2 grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
@@ -193,6 +207,13 @@ export function Dashboard() {
                 <li>
                   <Link className="text-indigo-600 hover:text-indigo-800 hover:underline" to="/dashboard/roles">
                     Role management →
+                  </Link>
+                </li>
+              )}
+              {canAttendance && (
+                <li>
+                  <Link className="text-indigo-600 hover:text-indigo-800 hover:underline" to="/dashboard/attendance">
+                    Employee attendance →
                   </Link>
                 </li>
               )}

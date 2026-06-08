@@ -6,11 +6,14 @@
 /** Role id -> module ids ('*' = all modules) */
 export const ROLE_MODULE_MAP: Record<string, readonly string[]> = {
   admin: ['*'],
-  user: ['dashboard', 'complaints', 'leads', 'invoices', 'expenses', 'products', 'customers', 'orders', 'documents'],
+  user: ['dashboard', 'complaints', 'leads', 'invoices', 'expenses', 'products', 'customers', 'orders', 'documents', 'tenders'],
   viewer: ['dashboard'],
   // content_writer: ['dashboard', 'content'],
   // sales_manager: ['dashboard', 'sales', 'leads'],
   technician: ['dashboard', 'complaints'],
+  attendance_hr: ['dashboard', 'attendance'],
+  attendance_manager: ['dashboard', 'attendance'],
+  attendance_employee: ['dashboard'],
 };
 
 export const MODULE_LABELS: Record<string, string> = {
@@ -25,6 +28,8 @@ export const MODULE_LABELS: Record<string, string> = {
   orders: 'Order Management',
   expenses: 'Expenses',
   documents: 'Documents',
+  attendance: 'Employee attendance',
+  tenders: 'Tender management',
 };
 
 /** Role id -> display label (fallback if API not used) */
@@ -35,6 +40,9 @@ export const ROLE_LABELS: Record<string, string> = {
   // content_writer: 'Content writer',
   // sales_manager: 'Sales manager',
   technician: 'Technician',
+  attendance_hr: 'Attendance HR',
+  attendance_manager: 'Attendance Manager',
+  attendance_employee: 'Attendance Employee',
 };
 
 /** Nav items: only modules that have a route get an entry here */
@@ -55,8 +63,10 @@ export const NAV_MODULES: NavModule[] = [
   { moduleId: 'products', label: 'Products', path: '/dashboard/products', end: false },
   { moduleId: 'orders', label: 'Order Management', path: '/dashboard/orders', end: false },
   { moduleId: 'complaints', label: 'Complaint management', path: '/dashboard/complaints', end: false },
+  { moduleId: 'tenders', label: 'Tender management', path: '/dashboard/tenders', end: false },
   { moduleId: 'expenses', label: 'Expenses', path: '/dashboard/expenses', end: false },
   { moduleId: 'documents', label: 'Documents', path: '/dashboard/documents', end: false },
+  { moduleId: 'attendance', label: 'Employee attendance', path: '/dashboard/attendance', end: false },
   // Sales / Finance / Content – commented for now
   // { moduleId: 'sales', label: 'Sales management', path: '/dashboard/sales', end: false },
   // { moduleId: 'finance', label: 'Finance management', path: '/dashboard/finance', end: false },
@@ -96,6 +106,9 @@ export function getRoleLabel(
 
 /** Resolve module id from pathname for route protection (longest path wins) */
 export function getModuleIdFromPath(pathname: string): string | null {
+  if (pathname === '/dashboard/attendance' || pathname.startsWith('/dashboard/attendance/')) {
+    return 'attendance';
+  }
   const sorted = [...NAV_MODULES].sort((a, b) => b.path.length - a.path.length);
   const item = sorted.find(
     (m) => pathname === m.path || pathname.startsWith(m.path + '/')

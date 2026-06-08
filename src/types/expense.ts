@@ -24,6 +24,8 @@ export interface Expense {
   status: ExpenseStatus;
   receiptUrl?: string;
   expenseDate: string;
+  batchId?: string;
+  batchTitle?: string;
   submittedBy: { _id: string; fullName: string; email?: string } | string;
   reviewedBy?: { _id: string; fullName: string; email?: string } | string | null;
   reviewedAt?: string | null;
@@ -69,6 +71,45 @@ export interface CreateExpensePayload {
   currency?: string;
   category: ExpenseCategory;
   expenseDate: string;
+}
+
+export interface BulkExpenseItemPayload {
+  title: string;
+  description?: string;
+  amount: number;
+  currency?: string;
+  category: ExpenseCategory;
+  expenseDate: string;
+}
+
+export interface CreateExpensesBulkPayload {
+  batchTitle?: string;
+  items: BulkExpenseItemPayload[];
+}
+
+export interface CreateExpensesBulkResponse {
+  message: string;
+  batchId: string;
+  batchTitle?: string;
+  created: number;
+  totalAmount: number;
+  data: Expense[];
+}
+
+export interface ExpenseBatchSummary {
+  batchId: string;
+  batchTitle?: string;
+  submittedBy: { _id: string; fullName: string; email?: string } | string;
+  createdAt: string;
+  itemCount: number;
+  totalAmount: number;
+  statusCounts: Partial<Record<ExpenseStatus, number>>;
+  data: Expense[];
+}
+
+export interface ReviewExpenseBatchPayload {
+  status: 'approved' | 'rejected' | 'paid';
+  reviewNote?: string;
 }
 
 export interface UpdateExpensePayload {

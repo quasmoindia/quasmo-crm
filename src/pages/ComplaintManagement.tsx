@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FiList, FiGrid, FiUpload, FiFile, FiMessageCircle, FiCopy, FiEdit2, FiCheck, FiX } from 'react-icons/fi';
+import { FiList, FiGrid, FiUpload, FiFile, FiMessageCircle, FiCopy, FiEdit2, FiCheck, FiX, FiEye, FiTrash2 } from 'react-icons/fi';
 import {
   DndContext,
   type DragEndEvent,
@@ -14,6 +14,7 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
+import { TableRowActions } from '../components/TableRowActions';
 import {
   useComplaintsList,
   useCreateComplaint,
@@ -727,38 +728,38 @@ export function ComplaintManagement() {
             }
             isLoading={isLoading}
             emptyMessage="No complaints found."
-            renderActions={(c) => (
-              <>
-                {getMessageTarget(c) && (
-                  <button
-                    type="button"
-                    onClick={() => setMessageTarget(getMessageTarget(c)!)}
-                    className="mr-2 flex items-center gap-1 text-slate-500 hover:text-indigo-600"
-                    title="Send message"
-                    aria-label="Message user"
-                  >
-                    <FiMessageCircle className="size-4" aria-hidden />
-                    Message
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setDetailId(c._id)}
-                  className="mr-2 text-indigo-600 hover:text-indigo-800"
-                >
-                  View
-                </button>
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => setDeleteTarget(c)}
-                    className="text-red-600 hover:text-red-800"
-                  >
-                    Delete
-                  </button>
-                )}
-              </>
-            )}
+            renderActions={(c) => {
+              const msgTarget = getMessageTarget(c);
+              return (
+                <TableRowActions
+                  items={[
+                    {
+                      key: 'message',
+                      label: 'Send message',
+                      icon: FiMessageCircle,
+                      variant: 'default',
+                      hidden: !msgTarget,
+                      onClick: () => setMessageTarget(msgTarget!),
+                    },
+                    {
+                      key: 'view',
+                      label: 'View complaint',
+                      icon: FiEye,
+                      variant: 'primary',
+                      onClick: () => setDetailId(c._id),
+                    },
+                    {
+                      key: 'delete',
+                      label: 'Delete complaint',
+                      icon: FiTrash2,
+                      variant: 'danger',
+                      hidden: !isAdmin,
+                      onClick: () => setDeleteTarget(c),
+                    },
+                  ]}
+                />
+              );
+            }}
           />
         )}
       </Card>

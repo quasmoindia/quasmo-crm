@@ -155,7 +155,7 @@ export function DataTable<T extends object>({
                     </td>
                   ))}
                   {renderActions && (
-                    <td className="px-4 py-3 text-right">{renderActions(row)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right">{renderActions(row)}</td>
                   )}
                 </tr>
               ))}

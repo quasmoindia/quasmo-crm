@@ -1,10 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiPlus, FiTrash2 } from 'react-icons/fi';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { SearchableSelect } from '../components/SearchableSelect';
+import {
+  ShippingDetailsFields,
+  emptyShippingDetails,
+  hasAnyShippingInput,
+  shippingDetailsToPayload,
+  validateShippingDetails,
+  type ShippingDetailsValues,
+} from '../components/orders/ShippingDetailsFields';
 import { useCreateOrder } from '../api/orders';
 import { useCustomersList } from '../api/customers';
 import { useProductsList } from '../api/products';
@@ -20,10 +28,16 @@ export function AddOrder() {
   const [items, setItems] = useState<{ product: string; quantity: number; notes: string }[]>([
     { product: '', quantity: 1, notes: '' },
   ]);
+  const [shipping, setShipping] = useState<ShippingDetailsValues>(emptyShippingDetails);
+  const shippingTouchedRef = useRef(false);
 
   // Fetch lists for dropdowns
   const { data: customersData, isLoading: loadingCustomers } = useCustomersList({ limit: 200, page: 1 });
   const customers = customersData?.data ?? [];
+  const selectedCustomer = useMemo(
+    () => customers.find((c) => c._id === customerId),
+    [customers, customerId]
+  );
 
   const { data: productsData, isLoading: loadingProducts } = useProductsList({ limit: 500, page: 1 });
   const products = productsData?.data ?? [];
@@ -52,6 +66,22 @@ export function AddOrder() {
     setItems(newItems);
   };
 
+  const updateShipping = (field: keyof ShippingDetailsValues, value: string) => {
+    shippingTouchedRef.current = true;
+    setShipping((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const fillShippingFromCustomer = () => {
+    if (!selectedCustomer) return;
+    shippingTouchedRef.current = true;
+    setShipping({
+      shipToName: selectedCustomer.name,
+      shipToPhone: selectedCustomer.phone ?? '',
+      shipToAddress: selectedCustomer.address ?? '',
+      labelCount: shipping.labelCount || '1',
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerId) return alert('Please select a customer.');
@@ -63,6 +93,9 @@ export function AddOrder() {
         notes: item.notes.trim() || undefined,
       }));
     if (validItems.length === 0) return alert('Please add at least one valid product.');
+
+    const shippingError = validateShippingDetails(shipping);
+    if (shippingError) return alert(shippingError);
 
     for (let i = 0; i < items.length; i++) {
       const row = items[i];
@@ -85,6 +118,7 @@ export function AddOrder() {
         specificationNotes: specificationNotes.trim() || undefined,
         packingInstructions: packingInstructions.trim() || undefined,
         items: validItems,
+        shippingDetails: hasAnyShippingInput(shipping) ? shippingDetailsToPayload(shipping) : null,
       });
       navigate('/dashboard/orders');
     } catch (err) {
@@ -120,7 +154,20 @@ export function AddOrder() {
             <SearchableSelect
               label="Customer"
               value={customerId}
-              onChange={setCustomerId}
+              onChange={(id) => {
+                setCustomerId(id);
+                if (!shippingTouchedRef.current) {
+                  const c = customers.find((customer) => customer._id === id);
+                  if (c) {
+                    setShipping({
+                      shipToName: c.name,
+                      shipToPhone: c.phone ?? '',
+                      shipToAddress: c.address ?? '',
+                      labelCount: '1',
+                    });
+                  }
+                }
+              }}
               required
               loading={loadingCustomers}
               options={customers.map((customer) => ({
@@ -262,6 +309,16 @@ export function AddOrder() {
               rows={3}
             />
           </div>
+        </Card>
+
+        <Card>
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">5. Shipping Details</h2>
+          <ShippingDetailsFields
+            values={shipping}
+            onChange={updateShipping}
+            onFillFromCustomer={selectedCustomer ? fillShippingFromCustomer : undefined}
+            disabled={createMutation.isPending}
+          />
         </Card>
 
         <div className="flex justify-end gap-3">

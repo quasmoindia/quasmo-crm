@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
-import { FiList, FiGrid, FiUpload, FiDownload, FiFile, FiMessageCircle, FiEye } from 'react-icons/fi';
+import { FiList, FiGrid, FiUpload, FiDownload, FiFile, FiMessageCircle, FiEye, FiTrash2 } from 'react-icons/fi';
 import { useDraftPersister, formatDraftSavedAt } from '../utils/useDraftPersister';
 import {
   DndContext,
@@ -16,6 +16,7 @@ import { GstinLookupButton, type GstinLookupResponse } from '../components/Gstin
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
+import { TableRowActions } from '../components/TableRowActions';
 import {
   useLeadsList,
   useLead,
@@ -217,7 +218,7 @@ function LeadLinkedInvoicesSection({ leadId }: { leadId: string }) {
         {isError && <p className="text-sm text-red-600">{(error as Error).message}</p>}
         {!isLoading && !isError && rows.length === 0 && (
           <p className="text-sm text-slate-500">
-            None yet. Create a tax invoice, proforma, or quotation and choose this lead in the form.
+            None yet. Create a tax invoice, proforma, quotation, or purchase order and choose this lead in the form.
           </p>
         )}
         {rows.length > 0 && (
@@ -587,43 +588,39 @@ export function LeadManagement() {
     { key: 'status', label: 'Status', render: (l: Lead) => <LeadStatusBadge status={l.status} /> },
     { key: 'assignedTo', label: 'Assigned to', render: (l: Lead) => assignedToName(l) },
     { key: 'createdAt', label: 'Created', render: (l: Lead) => formatDate(l.createdAt) },
-    {
-      key: 'actions',
-      label: '',
-      render: (l: Lead) => (
-        <>
-          <button
-            type="button"
-            onClick={() => setDetailId(l._id)}
-            className="mr-2 text-indigo-600 hover:text-indigo-800"
-          >
-            View
-          </button>
-          {l.phone && (
-            <button
-              type="button"
-              onClick={() => setMessageTarget({ name: l.name, phone: l.phone })}
-              className="mr-2 text-indigo-600 hover:text-indigo-800"
-              title="Send message"
-              aria-label="Message lead"
-            >
-              <FiMessageCircle className="mr-0.5 inline size-3.5" aria-hidden />
-              Message
-            </button>
-          )}
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setDeleteTarget(l)}
-              className="text-red-600 hover:text-red-800"
-            >
-              Delete
-            </button>
-          )}
-        </>
-      ),
-    },
   ];
+
+  function renderLeadActions(l: Lead) {
+    return (
+      <TableRowActions
+        items={[
+          {
+            key: 'view',
+            label: 'View lead',
+            icon: FiEye,
+            variant: 'primary',
+            onClick: () => setDetailId(l._id),
+          },
+          {
+            key: 'message',
+            label: 'Send message',
+            icon: FiMessageCircle,
+            variant: 'default',
+            hidden: !l.phone,
+            onClick: () => setMessageTarget({ name: l.name, phone: l.phone }),
+          },
+          {
+            key: 'delete',
+            label: 'Delete lead',
+            icon: FiTrash2,
+            variant: 'danger',
+            hidden: !isAdmin,
+            onClick: () => setDeleteTarget(l),
+          },
+        ]}
+      />
+    );
+  }
 
   return (
     <div>
@@ -718,6 +715,7 @@ export function LeadManagement() {
             columns={columns}
             data={leads}
             rowKey={(l) => l._id}
+            renderActions={renderLeadActions}
             search={{
               value: searchInput,
               onChange: setSearchInput,

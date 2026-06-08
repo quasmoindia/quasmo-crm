@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Fragment } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   FiPlus, FiEdit2, FiTrash2, FiEye, FiUpload, FiCheckCircle, FiXCircle,
   FiDollarSign, FiTrendingUp, FiClock, FiX, FiPaperclip, FiChevronLeft,
-  FiChevronRight, FiChevronsLeft, FiChevronsRight,
+  FiChevronRight, FiChevronsLeft, FiChevronsRight, FiLayers, FiChevronDown,
+  FiChevronUp, FiCopy,
 } from 'react-icons/fi';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
@@ -11,11 +13,14 @@ import {
   useExpensesList,
   useExpenseAnalytics,
   useCreateExpense,
+  useCreateExpensesBulk,
   useUpdateExpense,
   useReviewExpense,
+  useReviewExpenseBatch,
   useDeleteExpense,
   useUploadExpenseReceipt,
   uploadExpenseReceiptApi,
+  expensesQueryKey,
 } from '../api/expenses';
 import type {
   Expense,
@@ -72,6 +77,53 @@ function submitterName(exp: Expense): string {
   const s = exp.submittedBy;
   if (s && typeof s === 'object' && 'fullName' in s) return s.fullName;
   return '—';
+}
+
+function batchDateRange(expenses: Expense[]): string {
+  const dates = expenses.map((e) => e.expenseDate.slice(0, 10)).sort();
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  if (!first) return '—';
+  if (first === last) return formatDate(first);
+  return `${formatDate(first)} – ${formatDate(last)}`;
+}
+
+function batchAggregateStatus(expenses: Expense[]): ExpenseStatus | 'mixed' {
+  const statuses = new Set(expenses.map((e) => e.status));
+  if (statuses.size === 1) return expenses[0].status;
+  if (statuses.has('rejected')) return 'mixed';
+  if (statuses.has('open') && (statuses.has('approved') || statuses.has('paid'))) return 'mixed';
+  return 'mixed';
+}
+
+type TableGroup =
+  | { kind: 'batch'; batchId: string; expenses: Expense[] }
+  | { kind: 'single'; expense: Expense };
+
+function groupExpensesForTable(expenses: Expense[]): TableGroup[] {
+  const batchMap = new Map<string, Expense[]>();
+  const seenBatch = new Set<string>();
+  const groups: TableGroup[] = [];
+
+  for (const exp of expenses) {
+    if (exp.batchId) {
+      const list = batchMap.get(exp.batchId) ?? [];
+      list.push(exp);
+      batchMap.set(exp.batchId, list);
+    }
+  }
+
+  for (const exp of expenses) {
+    if (exp.batchId) {
+      if (!seenBatch.has(exp.batchId)) {
+        seenBatch.add(exp.batchId);
+        groups.push({ kind: 'batch', batchId: exp.batchId, expenses: batchMap.get(exp.batchId)! });
+      }
+    } else {
+      groups.push({ kind: 'single', expense: exp });
+    }
+  }
+  return groups;
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -436,6 +488,354 @@ function ExpenseFormModal({ expense, onClose, onSaved }: {
   );
 }
 
+// ─── Bulk Expense Report Modal ────────────────────────────────────────────────
+
+interface ExpenseLineRow {
+  id: string;
+  title: string;
+  description: string;
+  amount: string;
+  category: ExpenseCategory;
+  expenseDate: string;
+  receiptFile: File | null;
+}
+
+function emptyLine(defaultDate: string): ExpenseLineRow {
+  return {
+    id: crypto.randomUUID(),
+    title: '',
+    description: '',
+    amount: '',
+    category: 'other',
+    expenseDate: defaultDate,
+    receiptFile: null,
+  };
+}
+
+function BulkExpenseReportModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const bulkMut = useCreateExpensesBulk();
+  const qc = useQueryClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const [batchTitle, setBatchTitle] = useState('');
+  const [defaultDate, setDefaultDate] = useState(today);
+  const [rows, setRows] = useState<ExpenseLineRow[]>(() => [emptyLine(today), emptyLine(today), emptyLine(today)]);
+  const [error, setError] = useState<string | null>(null);
+  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const total = rows.reduce((sum, r) => {
+    const n = parseFloat(r.amount);
+    return sum + (isNaN(n) ? 0 : n);
+  }, 0);
+
+  const isPending = bulkMut.isPending;
+
+  function updateRow(id: string, patch: Partial<ExpenseLineRow>) {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  function addRow() {
+    setRows((prev) => [...prev, emptyLine(defaultDate)]);
+  }
+
+  function duplicateRow(id: string) {
+    setRows((prev) => {
+      const src = prev.find((r) => r.id === id);
+      if (!src) return prev;
+      const copy = { ...src, id: crypto.randomUUID(), receiptFile: null };
+      const idx = prev.findIndex((r) => r.id === id);
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+  }
+
+  function removeRow(id: string) {
+    setRows((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.id !== id)));
+  }
+
+  function applyDateToAll() {
+    setRows((prev) => prev.map((r) => ({ ...r, expenseDate: defaultDate })));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    const validRows = rows.filter((r) => r.title.trim() || r.amount.trim());
+    if (validRows.length === 0) {
+      setError('Add at least one expense line with title and amount');
+      return;
+    }
+
+    for (let i = 0; i < validRows.length; i++) {
+      const r = validRows[i];
+      if (!r.title.trim()) { setError(`Line ${i + 1}: title is required`); return; }
+      const n = parseFloat(r.amount);
+      if (isNaN(n) || n < 0) { setError(`Line ${i + 1}: enter a valid amount`); return; }
+      if (!r.expenseDate) { setError(`Line ${i + 1}: date is required`); return; }
+    }
+
+    try {
+      const result = await bulkMut.mutateAsync({
+        batchTitle: batchTitle.trim() || undefined,
+        items: validRows.map((r) => ({
+          title: r.title.trim(),
+          description: r.description.trim() || undefined,
+          amount: parseFloat(r.amount),
+          category: r.category,
+          expenseDate: r.expenseDate,
+        })),
+      });
+
+      const receiptUploads = validRows
+        .map((r, i) => ({ file: r.receiptFile, expenseId: result.data[i]?._id }))
+        .filter((x): x is { file: File; expenseId: string } => !!x.file && !!x.expenseId);
+
+      if (receiptUploads.length > 0) {
+        await Promise.all(receiptUploads.map(({ file, expenseId }) => uploadExpenseReceiptApi(expenseId, file)));
+        await qc.invalidateQueries({ queryKey: expensesQueryKey });
+      }
+
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  const SEL = 'w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/25 disabled:bg-slate-50';
+  const CELL = 'px-2 py-1.5 align-top';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200/60" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-white">Submit expense report</h2>
+            <p className="text-xs text-white/70 mt-0.5">Add all expenses for the day or trip in one go</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white"><FiX className="size-5" /></button>
+        </div>
+
+        <form onSubmit={(e) => void handleSubmit(e)} className="flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 space-y-3 border-b border-slate-100 px-6 py-4">
+            {error && (
+              <div className="flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-sm text-red-700">
+                <FiXCircle className="size-4 shrink-0" />{error}
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                <Input
+                  label="Report title (optional)"
+                  value={batchTitle}
+                  onChange={(e) => setBatchTitle(e.target.value)}
+                  placeholder="e.g. Mumbai client visit, Week of 3 Jun…"
+                  disabled={isPending}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Default date</label>
+                <div className="flex gap-2">
+                  <input type="date" value={defaultDate} onChange={(e) => setDefaultDate(e.target.value)} disabled={isPending} className={SEL} />
+                  <Button type="button" variant="outline" onClick={applyDateToAll} disabled={isPending} className="shrink-0 px-2 text-xs" title="Apply to all rows">
+                    Apply all
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-white">
+                <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  <th className={`${CELL} min-w-[140px]`}>Title *</th>
+                  <th className={`${CELL} w-32`}>Category</th>
+                  <th className={`${CELL} w-28`}>Date</th>
+                  <th className={`${CELL} w-24`}>Amount ₹ *</th>
+                  <th className={`${CELL} min-w-[100px]`}>Notes</th>
+                  <th className={`${CELL} w-24`}>Receipt</th>
+                  <th className={`${CELL} w-16`} />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {rows.map((row, idx) => (
+                  <tr key={row.id} className="hover:bg-slate-50/50">
+                    <td className={CELL}>
+                      <input value={row.title} onChange={(e) => updateRow(row.id, { title: e.target.value })} placeholder={`Expense ${idx + 1}`} disabled={isPending} className={SEL} />
+                    </td>
+                    <td className={CELL}>
+                      <select value={row.category} onChange={(e) => updateRow(row.id, { category: e.target.value as ExpenseCategory })} disabled={isPending} className={SEL}>
+                        {EXPENSE_CATEGORY_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{EXPENSE_CATEGORY_ICONS[o.value]} {o.label}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className={CELL}>
+                      <input type="date" value={row.expenseDate} onChange={(e) => updateRow(row.id, { expenseDate: e.target.value })} disabled={isPending} className={SEL} />
+                    </td>
+                    <td className={CELL}>
+                      <input type="number" min="0" step="0.01" value={row.amount} onChange={(e) => updateRow(row.id, { amount: e.target.value })} placeholder="0" disabled={isPending} className={SEL} />
+                    </td>
+                    <td className={CELL}>
+                      <input value={row.description} onChange={(e) => updateRow(row.id, { description: e.target.value })} placeholder="Optional" disabled={isPending} className={SEL} />
+                    </td>
+                    <td className={CELL}>
+                      <input ref={(el) => { fileRefs.current[row.id] = el; }} type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => updateRow(row.id, { receiptFile: e.target.files?.[0] ?? null })} />
+                      <button type="button" onClick={() => fileRefs.current[row.id]?.click()} disabled={isPending}
+                        className={`flex w-full items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs ${row.receiptFile ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                        <FiPaperclip className="size-3" />
+                        {row.receiptFile ? 'Added' : 'Attach'}
+                      </button>
+                    </td>
+                    <td className={CELL}>
+                      <div className="flex gap-0.5">
+                        <button type="button" onClick={() => duplicateRow(row.id)} title="Duplicate row" className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><FiCopy className="size-3.5" /></button>
+                        <button type="button" onClick={() => removeRow(row.id)} title="Remove row" disabled={rows.length <= 1} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"><FiX className="size-3.5" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Button type="button" variant="outline" onClick={addRow} disabled={isPending || rows.length >= 50} className="mt-3 w-full border-dashed">
+              <FiPlus className="mr-1 inline size-4" />Add another line
+            </Button>
+          </div>
+
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/80 px-6 py-4">
+            <div>
+              <p className="text-xs text-slate-500">{rows.length} line{rows.length !== 1 ? 's' : ''}</p>
+              <p className="text-lg font-bold text-indigo-600">{formatMoneyFull(total)}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>Cancel</Button>
+              <Button type="submit" loading={isPending}>Submit report</Button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Batch Review Modal ───────────────────────────────────────────────────────
+
+function BatchReviewModal({ batchId, expenses, initialStatus, onClose }: {
+  batchId: string;
+  expenses: Expense[];
+  initialStatus: 'approved' | 'rejected' | 'paid';
+  onClose: () => void;
+}) {
+  const reviewMut = useReviewExpenseBatch();
+  const [reviewStatus, setReviewStatus] = useState<'approved' | 'rejected' | 'paid'>(initialStatus);
+  const [note, setNote] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const openCount = expenses.filter((e) => e.status === 'open').length;
+  const approvedCount = expenses.filter((e) => e.status === 'approved').length;
+  const totalAmount = expenses.reduce((s, e) => s + e.amount, 0);
+  const batchTitle = expenses[0]?.batchTitle;
+  const canMarkPaid = approvedCount > 0 && openCount === 0;
+
+  useEffect(() => {
+    if (canMarkPaid) setReviewStatus('paid');
+  }, [canMarkPaid]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className={`flex shrink-0 items-center justify-between px-6 py-4 ${canMarkPaid && reviewStatus === 'paid' ? 'bg-indigo-600' : 'border-b border-slate-100'}`}>
+          <div>
+            <h2 className={`font-semibold ${canMarkPaid && reviewStatus === 'paid' ? 'text-white' : 'text-slate-900'}`}>
+              Review expense report
+            </h2>
+            <p className={`text-xs mt-0.5 ${canMarkPaid && reviewStatus === 'paid' ? 'text-white/70' : 'text-slate-500'}`}>
+              {expenses.length} items · {formatMoneyFull(totalAmount)}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className={`rounded-lg p-1.5 ${canMarkPaid && reviewStatus === 'paid' ? 'text-white/70 hover:bg-white/10' : 'text-slate-400 hover:bg-slate-100'}`}>
+            <FiX className="size-4" />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto space-y-4 p-6">
+          <div className="rounded-xl bg-slate-50 p-4">
+            <p className="font-semibold text-slate-800">{batchTitle || 'Expense report'}</p>
+            <p className="text-xs text-slate-500 mt-1">{batchDateRange(expenses)} · {submitterName(expenses[0])}</p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+              {openCount > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">{openCount} pending</span>}
+              {approvedCount > 0 && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">{approvedCount} approved</span>}
+            </div>
+          </div>
+
+          <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
+            {expenses.map((e) => (
+              <div key={e._id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-slate-800">{e.title}</p>
+                  <p className="text-xs text-slate-400">{formatDate(e.expenseDate)} · {categoryLabel(e.category)}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-mono font-semibold text-slate-800">{formatMoneyFull(e.amount)}</p>
+                  <StatusBadge status={e.status} compact />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {error && <p className="rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>}
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">Decision *</label>
+            {canMarkPaid ? (
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+                All items are approved — confirm payment for {approvedCount} expense{approvedCount !== 1 ? 's' : ''}.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {(['approved', 'rejected'] as const).map((s) => (
+                  <button key={s} type="button" onClick={() => setReviewStatus(s)}
+                    className={`rounded-xl border py-2.5 text-sm font-medium transition-all ${reviewStatus === s ? (s === 'approved' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-100' : 'border-red-400 bg-red-50 text-red-700 ring-2 ring-red-100') : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                    {s === 'approved' ? `✅ Approve all (${openCount})` : `❌ Reject all (${openCount})`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Note (optional)</label>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
+              placeholder={reviewStatus === 'rejected' ? 'Reason for rejection…' : 'Any remarks…'}
+              className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/25" />
+          </div>
+        </div>
+
+        <div className="flex shrink-0 gap-2 border-t border-slate-100 px-6 py-4">
+          <Button variant="outline" onClick={onClose} className="flex-1" disabled={reviewMut.isPending}>Cancel</Button>
+          <Button
+            onClick={async () => {
+              setError(null);
+              try {
+                await reviewMut.mutateAsync({ batchId, payload: { status: reviewStatus, reviewNote: note.trim() } });
+                onClose();
+              } catch (err) {
+                setError((err as Error).message);
+              }
+            }}
+            loading={reviewMut.isPending}
+            disabled={(reviewStatus === 'approved' || reviewStatus === 'rejected') && openCount === 0}
+            className={`flex-1 ${reviewStatus === 'rejected' ? 'bg-red-600 hover:bg-red-700' : reviewStatus === 'paid' ? 'bg-indigo-600 hover:bg-indigo-700' : ''}`}
+          >
+            {reviewStatus === 'approved' ? 'Approve report' : reviewStatus === 'rejected' ? 'Reject report' : 'Confirm payment'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Review Modal ─────────────────────────────────────────────────────────────
 
 function ReviewModal({ expense, initialStatus, onClose }: {
@@ -693,6 +1093,9 @@ function DetailModal({ expense, isAdmin, onClose, onEdit, onReview, onDelete }: 
             {expense.description && (
               <div className="col-span-2"><p className="text-xs text-slate-400">Description</p><p className="font-medium text-slate-800 whitespace-pre-wrap">{expense.description}</p></div>
             )}
+            {expense.batchId && (
+              <div className="col-span-2"><p className="text-xs text-slate-400">Part of report</p><p className="font-medium text-slate-800">{expense.batchTitle || 'Expense report'}</p></div>
+            )}
           </div>
 
           {/* Receipt */}
@@ -746,9 +1149,12 @@ export function ExpenseManagement() {
   const [categoryFilter, setCategoryFilter] = useState<ExpenseCategory | ''>('');
 
   const [formOpen, setFormOpen] = useState(false);
+  const [bulkFormOpen, setBulkFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [detailExpense, setDetailExpense] = useState<Expense | null>(null);
   const [reviewExpense, setReviewExpense] = useState<Expense | null>(null);
+  const [reviewBatch, setReviewBatch] = useState<{ batchId: string; expenses: Expense[] } | null>(null);
+  const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
 
   const deleteMut = useDeleteExpense();
 
@@ -762,6 +1168,69 @@ export function ExpenseManagement() {
 
   const expenses = data?.data ?? [];
   const pagination = data?.pagination;
+  const tableGroups = groupExpensesForTable(expenses);
+
+  function toggleBatch(batchId: string) {
+    setExpandedBatches((prev) => {
+      const next = new Set(prev);
+      if (next.has(batchId)) next.delete(batchId);
+      else next.add(batchId);
+      return next;
+    });
+  }
+
+  function renderExpenseRow(r: Expense, indent = false) {
+    return (
+      <tr key={r._id} className={`group transition-colors hover:bg-slate-50/70 ${indent ? 'bg-slate-50/30' : ''}`}>
+        <td className="px-4 py-2.5">
+          <div className={`flex items-center gap-2 ${indent ? 'pl-6' : ''}`}>
+            <span className="font-medium text-slate-800 leading-snug">{r.title}</span>
+            {r.receiptUrl && (
+              <a href={r.receiptUrl} target="_blank" rel="noopener noreferrer" title="View receipt"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
+                <FiPaperclip className="size-2.5" />Receipt
+              </a>
+            )}
+          </div>
+          {r.description && <p className={`mt-0.5 truncate text-xs text-slate-400 max-w-[200px] ${indent ? 'pl-6' : ''}`}>{r.description}</p>}
+        </td>
+        <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-500">{formatDate(r.expenseDate)}</td>
+        <td className="whitespace-nowrap px-4 py-2.5 font-mono text-sm font-semibold text-slate-800">{formatMoneyFull(r.amount, r.currency)}</td>
+        <td className="px-4 py-2.5">
+          <span className="text-xs text-slate-600">{EXPENSE_CATEGORY_ICONS[r.category]} {categoryLabel(r.category)}</span>
+        </td>
+        <td className="px-4 py-2.5"><StatusBadge status={r.status} compact /></td>
+        {isAdmin && <td className="px-4 py-2.5 text-xs text-slate-500">{submitterName(r)}</td>}
+        <td className="px-4 py-2.5">
+          <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+            <button type="button" onClick={() => setDetailExpense(r)} title="View"
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
+              <FiEye className="size-3.5" />
+            </button>
+            {r.status === 'open' && (
+              <button type="button" onClick={() => openEdit(r)} title="Edit"
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-colors">
+                <FiEdit2 className="size-3.5" />
+              </button>
+            )}
+            {isAdmin && (r.status === 'open' || r.status === 'approved') && (
+              <button type="button" onClick={() => setReviewExpense(r)} title="Review"
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
+                <FiCheckCircle className="size-3.5" />
+              </button>
+            )}
+            {isAdmin && (
+              <button type="button" onClick={() => handleDelete(r)} title="Delete"
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors">
+                <FiTrash2 className="size-3.5" />
+              </button>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
+  }
 
   function openCreate() { setEditingExpense(null); setFormOpen(true); }
   function openEdit(exp: Expense) { setEditingExpense(exp); setDetailExpense(null); setFormOpen(true); }
@@ -781,11 +1250,16 @@ export function ExpenseManagement() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Expense Management</h1>
-          <p className="text-sm text-slate-500">Submit, track, and manage expenses with receipts.</p>
+          <p className="text-sm text-slate-500">Submit daily expense reports and track approvals.</p>
         </div>
-        <Button onClick={openCreate}>
-          <FiPlus className="mr-1.5 inline size-4" />New expense
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setBulkFormOpen(true)}>
+            <FiLayers className="mr-1.5 inline size-4" />Expense report
+          </Button>
+          <Button variant="outline" onClick={openCreate}>
+            <FiPlus className="mr-1.5 inline size-4" />Single expense
+          </Button>
+        </div>
       </div>
 
       {/* ── Two-column layout: sidebar analytics + main table ── */}
@@ -856,7 +1330,7 @@ export function ExpenseManagement() {
                 </div>
                 <p className="text-sm font-medium text-slate-700">No expenses found</p>
                 <p className="mt-1 text-xs text-slate-400">
-                  {hasFilters ? 'Try removing some filters.' : 'Submit your first expense to get started.'}
+                  {hasFilters ? 'Try removing some filters.' : 'Submit an expense report to log multiple items at once.'}
                 </p>
               </div>
             ) : (
@@ -873,61 +1347,69 @@ export function ExpenseManagement() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {expenses.map((r) => (
-                    <tr key={r._id} className="group transition-colors hover:bg-slate-50/70">
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-slate-800 leading-snug">{r.title}</span>
-                          {r.receiptUrl && (
-                            <a
-                              href={r.receiptUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="View receipt"
-                              onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                            >
-                              <FiPaperclip className="size-2.5" />Receipt
-                            </a>
-                          )}
-                        </div>
-                        {r.description && <p className="mt-0.5 truncate text-xs text-slate-400 max-w-[200px]">{r.description}</p>}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-500">{formatDate(r.expenseDate)}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 font-mono text-sm font-semibold text-slate-800">{formatMoneyFull(r.amount, r.currency)}</td>
-                      <td className="px-4 py-2.5">
-                        <span className="text-xs text-slate-600">{EXPENSE_CATEGORY_ICONS[r.category]} {categoryLabel(r.category)}</span>
-                      </td>
-                      <td className="px-4 py-2.5"><StatusBadge status={r.status} compact /></td>
-                      {isAdmin && <td className="px-4 py-2.5 text-xs text-slate-500">{submitterName(r)}</td>}
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                          <button type="button" onClick={() => setDetailExpense(r)} title="View"
-                            className="rounded-lg p-1.5 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
-                            <FiEye className="size-3.5" />
-                          </button>
-                          {r.status === 'open' && (
-                            <button type="button" onClick={() => openEdit(r)} title="Edit"
-                              className="rounded-lg p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-colors">
-                              <FiEdit2 className="size-3.5" />
+                  {tableGroups.map((group) => {
+                    if (group.kind === 'single') {
+                      return renderExpenseRow(group.expense);
+                    }
+
+                    const { batchId, expenses: batchItems } = group;
+                    const expanded = expandedBatches.has(batchId);
+                    const batchTotal = batchItems.reduce((s, e) => s + e.amount, 0);
+                    const aggStatus = batchAggregateStatus(batchItems);
+                    const openInBatch = batchItems.filter((e) => e.status === 'open').length;
+                    const approvedInBatch = batchItems.filter((e) => e.status === 'approved').length;
+                    const batchTitle = batchItems[0]?.batchTitle;
+                    const canBatchReview = isAdmin && (openInBatch > 0 || approvedInBatch > 0);
+
+                    return (
+                      <Fragment key={batchId}>
+                        <tr className="bg-indigo-50/40 hover:bg-indigo-50/60 transition-colors">
+                          <td className="px-4 py-2.5" colSpan={isAdmin ? 2 : 1}>
+                            <button type="button" onClick={() => toggleBatch(batchId)} className="flex items-start gap-2 text-left w-full">
+                              {expanded ? <FiChevronUp className="mt-0.5 size-4 shrink-0 text-indigo-500" /> : <FiChevronDown className="mt-0.5 size-4 shrink-0 text-indigo-500" />}
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <FiLayers className="size-3.5 text-indigo-500" />
+                                  <span className="font-semibold text-slate-800">{batchTitle || 'Expense report'}</span>
+                                  <span className="rounded-full bg-indigo-100 px-2 py-0 text-[10px] font-medium text-indigo-700">{batchItems.length} items</span>
+                                </div>
+                                <p className="mt-0.5 text-xs text-slate-500">{batchDateRange(batchItems)}</p>
+                              </div>
                             </button>
-                          )}
-                          {isAdmin && (r.status === 'open' || r.status === 'approved') && (
-                            <button type="button" onClick={() => setReviewExpense(r)} title="Review"
-                              className="rounded-lg p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
-                              <FiCheckCircle className="size-3.5" />
-                            </button>
-                          )}
-                          {isAdmin && (
-                            <button type="button" onClick={() => handleDelete(r)} title="Delete"
-                              className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors">
-                              <FiTrash2 className="size-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          </td>
+                          {!isAdmin && <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-500">{batchDateRange(batchItems)}</td>}
+                          <td className="whitespace-nowrap px-4 py-2.5 font-mono text-sm font-bold text-indigo-700">{formatMoneyFull(batchTotal)}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-500">Report</td>
+                          <td className="px-4 py-2.5">
+                            {aggStatus === 'mixed' ? (
+                              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">Mixed</span>
+                            ) : (
+                              <StatusBadge status={aggStatus} compact />
+                            )}
+                          </td>
+                          {isAdmin && <td className="px-4 py-2.5 text-xs text-slate-500">{submitterName(batchItems[0])}</td>}
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center justify-end gap-1">
+                              {canBatchReview && (
+                                <button type="button"
+                                  onClick={() => setReviewBatch({ batchId, expenses: batchItems })}
+                                  title="Review entire report"
+                                  className="rounded-lg px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 transition-colors">
+                                  <FiCheckCircle className="mr-0.5 inline size-3.5" />
+                                  {openInBatch > 0 ? 'Review all' : 'Mark paid'}
+                                </button>
+                              )}
+                              <button type="button" onClick={() => toggleBatch(batchId)} title={expanded ? 'Collapse' : 'Expand'}
+                                className="rounded-lg p-1.5 text-slate-500 hover:bg-indigo-100 hover:text-indigo-600">
+                                <FiEye className="size-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {expanded && batchItems.map((r) => renderExpenseRow(r, true))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -955,6 +1437,12 @@ export function ExpenseManagement() {
           onSaved={() => { setFormOpen(false); setEditingExpense(null); }}
         />
       )}
+      {bulkFormOpen && (
+        <BulkExpenseReportModal
+          onClose={() => setBulkFormOpen(false)}
+          onSaved={() => setBulkFormOpen(false)}
+        />
+      )}
       {detailExpense && (
         <DetailModal
           expense={detailExpense}
@@ -970,6 +1458,20 @@ export function ExpenseManagement() {
           expense={reviewExpense}
           initialStatus={reviewExpense.status === 'approved' ? 'paid' : 'approved'}
           onClose={() => setReviewExpense(null)}
+        />
+      )}
+      {reviewBatch && (
+        <BatchReviewModal
+          batchId={reviewBatch.batchId}
+          expenses={reviewBatch.expenses}
+          initialStatus={
+            reviewBatch.expenses.every((e) => e.status === 'approved') ||
+            (reviewBatch.expenses.some((e) => e.status === 'approved') &&
+              !reviewBatch.expenses.some((e) => e.status === 'open'))
+              ? 'paid'
+              : 'approved'
+          }
+          onClose={() => setReviewBatch(null)}
         />
       )}
     </div>

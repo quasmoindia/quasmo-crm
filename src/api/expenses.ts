@@ -6,6 +6,10 @@ import type {
   ExpensesListResponse,
   ExpenseAnalytics,
   CreateExpensePayload,
+  CreateExpensesBulkPayload,
+  CreateExpensesBulkResponse,
+  ExpenseBatchSummary,
+  ReviewExpenseBatchPayload,
   UpdateExpensePayload,
   ReviewExpensePayload,
   ExpenseStatus,
@@ -65,6 +69,21 @@ export function getExpenseAnalyticsApi(params?: { dateFrom?: string; dateTo?: st
 
 export function createExpenseApi(payload: CreateExpensePayload) {
   return post<Expense>(BASE, payload);
+}
+
+export function createExpensesBulkApi(payload: CreateExpensesBulkPayload) {
+  return post<CreateExpensesBulkResponse>(`${BASE}/bulk`, payload);
+}
+
+export function getExpenseBatchApi(batchId: string) {
+  return get<ExpenseBatchSummary>(`${BASE}/batch/${batchId}`);
+}
+
+export function reviewExpenseBatchApi(batchId: string, payload: ReviewExpenseBatchPayload) {
+  return patch<{ message: string; updated: number; data: Expense[] }>(
+    `${BASE}/batch/${batchId}/review`,
+    payload
+  );
 }
 
 export function updateExpenseApi(id: string, payload: UpdateExpensePayload) {
@@ -136,6 +155,31 @@ export function useCreateExpense() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: createExpenseApi,
+    onSuccess: () => qc.invalidateQueries({ queryKey: expensesQueryKey }),
+  });
+}
+
+export function useCreateExpensesBulk() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createExpensesBulkApi,
+    onSuccess: () => qc.invalidateQueries({ queryKey: expensesQueryKey }),
+  });
+}
+
+export function useExpenseBatch(batchId: string | null) {
+  return useQuery({
+    queryKey: [...expensesQueryKey, 'batch', batchId],
+    queryFn: () => getExpenseBatchApi(batchId!),
+    enabled: !!batchId,
+  });
+}
+
+export function useReviewExpenseBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ batchId, payload }: { batchId: string; payload: ReviewExpenseBatchPayload }) =>
+      reviewExpenseBatchApi(batchId, payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: expensesQueryKey }),
   });
 }

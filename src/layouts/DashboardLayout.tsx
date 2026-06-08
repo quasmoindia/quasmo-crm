@@ -18,14 +18,22 @@ import {
   FiUsers,
   FiUserCheck,
   FiX,
+  FiClock,
+  FiBriefcase,
 } from 'react-icons/fi';
 import { clearStoredToken, useCurrentUser } from '../api/auth';
+import {
+  canAccessAttendancePath,
+  getVisibleAttendanceNavItems,
+} from '../config/attendanceNav';
 import { canAccessModule, NAV_MODULES, getModuleIdFromPath } from '../config/roles';
+import { useKioskMode } from '../hooks/useKioskMode';
 
 const NAV_SECTIONS = [
   { title: null, moduleIds: ['dashboard'] },
-  { title: 'Sales & CRM', moduleIds: ['leads', 'customers', 'complaints'] },
+  { title: 'Sales & CRM', moduleIds: ['leads', 'customers', 'complaints', 'tenders'] },
   { title: 'Products & Inventory', moduleIds: ['products', 'orders', 'documents'] },
+  { title: 'HR & Attendance', moduleIds: ['attendance'] },
   { title: 'Operations', moduleIds: ['invoices', 'expenses', 'users', 'roles'] },
 ] as const;
 
@@ -34,6 +42,7 @@ const navIconsByModuleId: Record<string, IconType> = {
   leads: FiBarChart2,
   customers: FiUsers,
   complaints: FiAlertCircle,
+  tenders: FiBriefcase,
   products: FiBox,
   orders: FiShoppingCart,
   documents: FiFileText,
@@ -41,6 +50,7 @@ const navIconsByModuleId: Record<string, IconType> = {
   expenses: FiDollarSign,
   users: FiUserCheck,
   roles: FiSettings,
+  attendance: FiClock,
 };
 
 export function DashboardLayout() {
@@ -56,9 +66,19 @@ export function DashboardLayout() {
   const canAccessCurrent =
     !currentModuleId || !user || canAccessModule(user.role, currentModuleId, user.roleModules);
   const redirectToDashboard = user && currentModuleId && !canAccessCurrent;
+  const canAttendanceModule =
+    !!user && canAccessModule(user.role, 'attendance', user.roleModules);
+  const attendanceSidebarItems = getVisibleAttendanceNavItems(user?.role);
+  const attendanceRouteForbidden =
+    !!user &&
+    location.pathname.startsWith('/dashboard/attendance') &&
+    !canAccessAttendancePath(location.pathname, user.role);
+  const attendanceFallbackPath =
+    attendanceSidebarItems[0]?.path ?? '/dashboard';
   const navByModuleId = new Map(visibleNavItems.map((item) => [item.moduleId, item]));
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { locked: kioskLocked } = useKioskMode();
 
   useEffect(() => {
     setDrawerOpen(false);
@@ -86,7 +106,7 @@ export function DashboardLayout() {
   const sidebarContent = (
     <>
       <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/15 bg-linear-to-br from-[#3b4dff] via-[#2f5bff] to-[#2b66ff] px-4 text-white shadow-[0_1px_0_rgba(15,23,42,0.06)] sm:px-5">
-        <h1 className="truncate text-lg font-semibold leading-none tracking-tight">Quasmo CRM</h1>
+        <h1 className="truncate text-lg font-semibold leading-none tracking-tight">Hexa CRM</h1>
         <button
           type="button"
           onClick={() => setDrawerOpen(false)}
@@ -98,11 +118,17 @@ export function DashboardLayout() {
       </div>
       <nav className="flex flex-1 flex-col gap-5 overflow-y-auto p-3.5">
         {NAV_SECTIONS.map((section) => {
+          const isAttendanceSection = section.title === 'HR & Attendance';
+
           const sectionItems = section.moduleIds
+            .filter((moduleId) => moduleId !== 'attendance')
             .map((moduleId) => navByModuleId.get(moduleId))
             .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
-          if (!sectionItems.length) return null;
+          const showAttendance =
+            isAttendanceSection && canAttendanceModule && attendanceSidebarItems.length > 0;
+
+          if (!sectionItems.length && !showAttendance) return null;
 
           return (
             <div key={section.title ?? 'root'} className="space-y-2">
@@ -133,6 +159,26 @@ export function DashboardLayout() {
                     </NavLink>
                   );
                 })}
+                {showAttendance
+                  ? attendanceSidebarItems.map(({ path, label, end, icon: Icon }) => (
+                      <NavLink
+                        key={path}
+                        to={path}
+                        end={end}
+                        onClick={() => setDrawerOpen(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 rounded-xl py-2 pl-4 pr-3 text-sm font-medium transition-all ${
+                            isActive
+                              ? 'bg-linear-to-r from-[#3f51ff] to-[#305dff] text-white shadow-[0_8px_20px_rgba(59,93,255,0.35)]'
+                              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          }`
+                        }
+                      >
+                        <Icon className="size-4 shrink-0" />
+                        <span className="truncate">{label}</span>
+                      </NavLink>
+                    ))
+                  : null}
               </div>
             </div>
           );
@@ -153,7 +199,7 @@ export function DashboardLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f4f6fb]">
-      {drawerOpen && (
+      {!kioskLocked && drawerOpen && (
         <button
           type="button"
           aria-label="Close navigation overlay"
@@ -162,17 +208,20 @@ export function DashboardLayout() {
         />
       )}
 
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-72 max-w-[85vw] flex-col border-r border-[#dfe5f2] bg-white shadow-2xl transition-transform duration-300 ease-out lg:static lg:z-auto lg:w-72 lg:translate-x-0 lg:shadow-none ${
-          drawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
-        aria-label="Primary navigation"
-      >
-        {sidebarContent}
-      </aside>
+      {!kioskLocked && (
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 flex h-screen w-72 max-w-[85vw] flex-col border-r border-[#dfe5f2] bg-white shadow-2xl transition-transform duration-300 ease-out lg:static lg:z-auto lg:w-72 lg:translate-x-0 lg:shadow-none ${
+            drawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          }`}
+          aria-label="Primary navigation"
+        >
+          {sidebarContent}
+        </aside>
+      )}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[#dfe5f2] bg-white px-4 sm:gap-3 sm:px-6">
+        {!kioskLocked && (
+          <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[#dfe5f2] bg-white px-4 sm:gap-3 sm:px-6">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
@@ -230,8 +279,19 @@ export function DashboardLayout() {
             </div>
           </div>
         </header>
-        <main className="min-h-0 flex-1 overflow-auto bg-[#f4f6fb] px-4 py-3 sm:px-6 sm:py-5 lg:py-6">
-          {redirectToDashboard ? <Navigate to="/dashboard" replace /> : <Outlet />}
+        )}
+        <main
+          className={`min-h-0 flex-1 overflow-auto bg-[#f4f6fb] ${
+            kioskLocked ? 'p-4 sm:p-6' : 'px-4 py-3 sm:px-6 sm:py-5 lg:py-6'
+          }`}
+        >
+          {redirectToDashboard ? (
+            <Navigate to="/dashboard" replace />
+          ) : attendanceRouteForbidden ? (
+            <Navigate to={attendanceFallbackPath} replace />
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
     </div>
