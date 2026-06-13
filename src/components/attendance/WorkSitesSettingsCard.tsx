@@ -4,19 +4,22 @@ import { Button } from '../Button';
 import { Card } from '../Card';
 import { Input } from '../Input';
 import { DataTable } from '../DataTable';
-import { useCreateSite, useSitesList, useUpdateSite } from '../../api/attendance';
+import { useCreateSite, useDeleteSite, useSitesList, useUpdateSite } from '../../api/attendance';
 import type { WorkSite } from '../../types/attendance';
 
 type WorkSitesSettingsCardProps = {
   canEdit: boolean;
+  isAdmin?: boolean;
   maxGpsAccuracyMeters: number;
 };
 
-export function WorkSitesSettingsCard({ canEdit, maxGpsAccuracyMeters }: WorkSitesSettingsCardProps) {
+export function WorkSitesSettingsCard({ canEdit, isAdmin, maxGpsAccuracyMeters }: WorkSitesSettingsCardProps) {
   const { data, isLoading } = useSitesList();
   const createMutation = useCreateSite();
   const updateMutation = useUpdateSite();
+  const deleteMutation = useDeleteSite();
   const [editing, setEditing] = useState<WorkSite | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WorkSite | null>(null);
   const [locating, setLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -117,9 +120,16 @@ export function WorkSitesSettingsCard({ canEdit, maxGpsAccuracyMeters }: WorkSit
         emptyMessage="No work sites yet. Add your factory location."
         renderActions={(s) =>
           canEdit ? (
-            <button type="button" className="text-sm text-[#305dff] hover:underline" onClick={() => openEdit(s)}>
-              Edit
-            </button>
+            <div className="flex items-center justify-end gap-2">
+              <button type="button" className="text-sm text-[#305dff] hover:underline" onClick={() => openEdit(s)}>
+                Edit
+              </button>
+              {isAdmin && (
+                <button type="button" className="text-sm text-red-600 hover:underline" onClick={() => setDeleteTarget(s)}>
+                  Delete
+                </button>
+              )}
+            </div>
           ) : null
         }
       />
@@ -152,6 +162,42 @@ export function WorkSitesSettingsCard({ canEdit, maxGpsAccuracyMeters }: WorkSit
               </Button>
               <Button variant="outline" onClick={() => setEditing(null)}>
                 Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleteTarget && isAdmin && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => setDeleteTarget(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-800">Delete work site</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Delete <span className="font-medium">{deleteTarget.name}</span>? Employees assigned to this site must be
+              reassigned first.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleteMutation.isPending}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                loading={deleteMutation.isPending}
+                onClick={async () => {
+                  try {
+                    await deleteMutation.mutateAsync(deleteTarget._id);
+                    setDeleteTarget(null);
+                  } catch (err) {
+                    alert((err as Error).message);
+                  }
+                }}
+              >
+                Delete
               </Button>
             </div>
           </div>

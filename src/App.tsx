@@ -36,6 +36,12 @@ import { AttendancePunch } from './pages/attendance/AttendancePunch';
 
 const queryClient = new QueryClient({
   defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        if ((error as Error)?.message === 'Session expired') return false;
+        return failureCount < 2;
+      },
+    },
     mutations: {
       retry: false,
     },

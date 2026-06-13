@@ -10,6 +10,7 @@ import {
   useCategoryTree,
   useBulkUpdateProductStock,
 } from '../api/products';
+import { useCurrentUser } from '../api/auth';
 import type { Product, ProductStatus } from '../types/product';
 import { STATUS_OPTIONS } from '../types/product';
 
@@ -67,6 +68,8 @@ function AnalyticsCard({
 
 export function ProductList() {
   const navigate = useNavigate();
+  const { data: authData } = useCurrentUser();
+  const isAdmin = authData?.user?.role === 'admin';
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProductStatus | ''>('');
@@ -313,14 +316,16 @@ export function ProductList() {
                     >
                       <FiEdit2 className="size-4" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(product)}
-                      className="rounded-lg border border-slate-200 p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600"
-                      title="Delete"
-                    >
-                      <FiTrash2 className="size-4" />
-                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(product)}
+                        className="rounded-lg border border-slate-200 p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600"
+                        title="Delete"
+                      >
+                        <FiTrash2 className="size-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

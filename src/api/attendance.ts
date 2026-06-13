@@ -127,6 +127,20 @@ export function useUpdateEmployee() {
   });
 }
 
+export function useDeleteEmployee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => del<{ message: string }>(`${BASE}/employees/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance', 'employees'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'employee'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'records'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'leaves'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'payroll'] });
+    },
+  });
+}
+
 export function useImportEmployees() {
   const qc = useQueryClient();
   return useMutation({
@@ -168,6 +182,18 @@ export function useUpdateSite() {
   });
 }
 
+export function useDeleteSite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => del<{ message: string }>(`${BASE}/sites/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance', 'sites'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'settings'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'punch-context'] });
+    },
+  });
+}
+
 export function useShiftsList() {
   return useQuery({
     queryKey: ['attendance', 'shifts'],
@@ -195,6 +221,14 @@ export function useUpdateShift() {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: Partial<Shift> }) =>
       patch<Shift>(`${BASE}/shifts/${id}`, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'shifts'] }),
+  });
+}
+
+export function useDeleteShift() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => del<{ message: string }>(`${BASE}/shifts/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'shifts'] }),
   });
 }

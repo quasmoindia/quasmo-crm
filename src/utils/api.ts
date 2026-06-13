@@ -1,4 +1,5 @@
 import { API_BASE_URL } from './constants';
+import { getStoredToken, handleSessionExpired, shouldLogoutOnUnauthorized } from './session';
 
 type RequestConfig = RequestInit & {
   params?: Record<string, string>;
@@ -14,7 +15,7 @@ async function request<T>(endpoint: string, config: RequestConfig = {}): Promise
       url.searchParams.set(key, value)
     );
   }
-  const token = localStorage.getItem('token');
+  const token = getStoredToken();
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(init.headers as Record<string, string>),
@@ -25,6 +26,10 @@ async function request<T>(endpoint: string, config: RequestConfig = {}): Promise
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
+    if (res.status === 401 && shouldLogoutOnUnauthorized(endpoint)) {
+      handleSessionExpired();
+      throw new Error('Session expired');
+    }
     throw new Error((data as { message?: string }).message ?? 'Request failed');
   }
   return data as T;

@@ -100,13 +100,19 @@ export function TenderManagement() {
           <span className="text-slate-400">—</span>
         ),
     },
-    {
-      key: 'priceQuoted',
-      label: 'Price Quoted',
-      render: (t: Tender) => (
-        <span className="font-mono font-semibold text-emerald-700">{formatMoney(t.priceQuoted)}</span>
-      ),
-    },
+    ...(isAdmin
+      ? [
+          {
+            key: 'priceQuoted',
+            label: 'Price Quoted',
+            render: (t: Tender) => (
+              <span className="font-mono font-semibold text-emerald-700">
+                {t.priceQuoted != null ? formatMoney(t.priceQuoted) : '—'}
+              </span>
+            ),
+          },
+        ]
+      : []),
     { key: 'created', label: 'Added On', render: (t: Tender) => <span className="text-slate-600">{formatDate(t.createdAt)}</span> },
   ];
 
@@ -116,7 +122,9 @@ export function TenderManagement() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Tender Management</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Track tender numbers, locations, departments, and quoted prices.
+            {isAdmin
+              ? 'Track tender numbers, locations, departments, and quoted prices.'
+              : 'Track tender numbers, locations, and departments.'}
           </p>
         </div>
         <Button className="shrink-0" onClick={() => setCreateOpen(true)}>
@@ -269,10 +277,11 @@ export function TenderManagement() {
       {createOpen && (
         <TenderFormModal
           title="Add tender"
+          showPricing
           isSaving={createMutation.isPending}
           onClose={() => setCreateOpen(false)}
           onSave={async (payload) => {
-            await createMutation.mutateAsync(payload);
+            await createMutation.mutateAsync(payload as CreateTenderPayload);
             setCreateOpen(false);
           }}
         />
@@ -282,6 +291,7 @@ export function TenderManagement() {
         <TenderFormModal
           title="Edit tender"
           initial={editTarget}
+          showPricing={isAdmin}
           isSaving={updateMutation.isPending}
           onClose={() => setEditTarget(null)}
           onSave={async (payload) => {
@@ -347,21 +357,24 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 function TenderFormModal({
   title,
   initial,
+  showPricing,
   isSaving,
   onClose,
   onSave,
 }: {
   title: string;
   initial?: Tender;
+  showPricing: boolean;
   isSaving: boolean;
   onClose: () => void;
-  onSave: (payload: CreateTenderPayload) => Promise<void>;
+  onSave: (payload: Partial<CreateTenderPayload> & { tenderNo: string }) => Promise<void>;
 }) {
   const [tenderNo, setTenderNo] = useState(initial?.tenderNo ?? '');
   const [location, setLocation] = useState(initial?.location ?? '');
   const [department, setDepartment] = useState(initial?.department ?? '');
-  const [priceQuoted, setPriceQuoted] = useState(initial != null ? String(initial.priceQuoted) : '');
+  const [priceQuoted, setPriceQuoted] = useState(initial?.priceQuoted != null ? String(initial.priceQuoted) : '');
   const [error, setError] = useState<string | null>(null);
+  const isCreate = initial == null;
 
   return (
     <div
@@ -392,18 +405,21 @@ function TenderFormModal({
               setError('Tender number is required');
               return;
             }
-            const numPrice = parseFloat(priceQuoted);
-            if (isNaN(numPrice) || numPrice < 0) {
-              setError('Enter a valid price quoted');
-              return;
+            const payload: Partial<CreateTenderPayload> & { tenderNo: string } = {
+              tenderNo: tenderNo.trim(),
+              location: location.trim() || undefined,
+              department: department.trim() || undefined,
+            };
+            if (showPricing || isCreate) {
+              const numPrice = parseFloat(priceQuoted);
+              if (isNaN(numPrice) || numPrice < 0) {
+                setError('Enter a valid price quoted');
+                return;
+              }
+              payload.priceQuoted = numPrice;
             }
             try {
-              await onSave({
-                tenderNo: tenderNo.trim(),
-                location: location.trim() || undefined,
-                department: department.trim() || undefined,
-                priceQuoted: numPrice,
-              });
+              await onSave(payload);
             } catch (err) {
               setError((err as Error).message);
             }
@@ -440,16 +456,18 @@ function TenderFormModal({
             />
           </div>
 
-          <Input
-            label="Price Quoted (₹) *"
-            type="number"
-            min="0"
-            step="0.01"
-            value={priceQuoted}
-            onChange={(e) => setPriceQuoted(e.target.value)}
-            disabled={isSaving}
-            placeholder="0.00"
-          />
+          {(showPricing || isCreate) && (
+            <Input
+              label="Price Quoted (₹) *"
+              type="number"
+              min="0"
+              step="0.01"
+              value={priceQuoted}
+              onChange={(e) => setPriceQuoted(e.target.value)}
+              disabled={isSaving}
+              placeholder="0.00"
+            />
+          )}
 
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
             <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>

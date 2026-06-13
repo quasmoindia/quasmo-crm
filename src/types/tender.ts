@@ -3,7 +3,7 @@ export interface Tender {
   tenderNo: string;
   location?: string;
   department?: string;
-  priceQuoted: number;
+  priceQuoted?: number;
   createdBy?: { _id: string; fullName: string; email?: string } | string;
   createdAt: string;
   updatedAt: string;

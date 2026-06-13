@@ -11,7 +11,7 @@ import { ShiftsSettingsCard } from '../../components/attendance/ShiftsSettingsCa
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
 
 export function AttendanceSettings() {
-  const { canManageSitesShifts } = useAttendancePermissions();
+  const { canManageSitesShifts, isAdmin } = useAttendancePermissions();
   const { data: settings } = useAttendanceSettings();
   const updateSettings = useUpdateAttendanceSettings();
 
@@ -330,10 +330,11 @@ export function AttendanceSettings() {
 
       <WorkSitesSettingsCard
         canEdit={canManageSitesShifts}
+        isAdmin={isAdmin}
         maxGpsAccuracyMeters={parseInt(policy.maxGpsAccuracyMeters, 10) || settings?.maxGpsAccuracyMeters || 100}
       />
 
-      <ShiftsSettingsCard canEdit={canManageSitesShifts} />
+      <ShiftsSettingsCard canEdit={canManageSitesShifts} isAdmin={isAdmin} />
     </div>
   );
 }
