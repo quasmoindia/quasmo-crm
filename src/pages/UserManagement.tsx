@@ -6,6 +6,7 @@ import { DataTable } from '../components/DataTable';
 import { useUsersList, useCreateUser, useUpdateUser, useDeleteUser } from '../api/users';
 import { useHexaUsersList, useCreateHexaUser, useUpdateHexaUser, useDeleteHexaUser } from '../api/hexaUsers';
 import { useRolesConfig } from '../api/config';
+import { useCurrentUser } from '../api/auth';
 import type { UserRecord, RoleOption } from '../types/user';
 import type { HexaUserRecord } from '../types/hexaUser';
 import { getRoleLabel } from '../config/roles';
@@ -61,6 +62,9 @@ export function UserManagement() {
   const [hexaCreateOpen, setHexaCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
   const [editingHexaUser, setEditingHexaUser] = useState<HexaUserRecord | null>(null);
+  const { data: authData } = useCurrentUser();
+  const isAdmin = authData?.user?.role === 'admin';
+  const currentUserId = authData?.user?.id;
   const { data, isLoading, isError, error } = useUsersList({ enabled: tab === 'crm' });
   const {
     data: hexaData,
@@ -93,17 +97,22 @@ export function UserManagement() {
           <Button variant="outline" onClick={() => setEditingUser(u)}>
             Edit
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (window.confirm(`Delete user "${u.fullName}" (${u.email})? This cannot be undone.`)) {
-                deleteMutation.mutate(u._id);
-              }
-            }}
-            disabled={deleteMutation.isPending}
-          >
-            Delete
-          </Button>
+          {isAdmin && u._id !== currentUserId && (
+            <Button
+              variant="outline"
+              className="border-red-200 text-red-700 hover:bg-red-50"
+              onClick={() => {
+                if (window.confirm(`Delete user "${u.fullName}" (${u.email})? This cannot be undone.`)) {
+                  deleteMutation.mutate(u._id, {
+                    onError: (err) => alert((err as Error).message),
+                  });
+                }
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              Delete
+            </Button>
+          )}
         </div>
       ),
     },
@@ -129,17 +138,22 @@ export function UserManagement() {
           <Button variant="outline" onClick={() => setEditingHexaUser(u)}>
             Edit
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (window.confirm(`Delete Hexa user "${u.fullName}" (${u.email})? This cannot be undone.`)) {
-                deleteHexaMutation.mutate(u._id);
-              }
-            }}
-            disabled={deleteHexaMutation.isPending}
-          >
-            Delete
-          </Button>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              className="border-red-200 text-red-700 hover:bg-red-50"
+              onClick={() => {
+                if (window.confirm(`Delete Hexa user "${u.fullName}" (${u.email})? This cannot be undone.`)) {
+                  deleteHexaMutation.mutate(u._id, {
+                    onError: (err) => alert((err as Error).message),
+                  });
+                }
+              }}
+              disabled={deleteHexaMutation.isPending}
+            >
+              Delete
+            </Button>
+          )}
         </div>
       ),
     },

@@ -4,18 +4,21 @@ import { Button } from '../Button';
 import { Card } from '../Card';
 import { Input } from '../Input';
 import { DataTable } from '../DataTable';
-import { useCreateShift, useShiftsList, useUpdateShift } from '../../api/attendance';
+import { useCreateShift, useDeleteShift, useShiftsList, useUpdateShift } from '../../api/attendance';
 import type { Shift } from '../../types/attendance';
 
 type ShiftsSettingsCardProps = {
   canEdit: boolean;
+  isAdmin?: boolean;
 };
 
-export function ShiftsSettingsCard({ canEdit }: ShiftsSettingsCardProps) {
+export function ShiftsSettingsCard({ canEdit, isAdmin }: ShiftsSettingsCardProps) {
   const { data, isLoading } = useShiftsList();
   const createMutation = useCreateShift();
   const updateMutation = useUpdateShift();
+  const deleteMutation = useDeleteShift();
   const [editing, setEditing] = useState<Shift | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Shift | null>(null);
   const [form, setForm] = useState({
     name: '',
     startTime: '09:00',
@@ -81,9 +84,16 @@ export function ShiftsSettingsCard({ canEdit }: ShiftsSettingsCardProps) {
         emptyMessage="No shifts configured."
         renderActions={(s) =>
           canEdit ? (
-            <button type="button" className="text-sm text-[#305dff] hover:underline" onClick={() => openEdit(s)}>
-              Edit
-            </button>
+            <div className="flex items-center justify-end gap-2">
+              <button type="button" className="text-sm text-[#305dff] hover:underline" onClick={() => openEdit(s)}>
+                Edit
+              </button>
+              {isAdmin && !s.isDefault && (
+                <button type="button" className="text-sm text-red-600 hover:underline" onClick={() => setDeleteTarget(s)}>
+                  Delete
+                </button>
+              )}
+            </div>
           ) : null
         }
       />
@@ -107,6 +117,42 @@ export function ShiftsSettingsCard({ canEdit }: ShiftsSettingsCardProps) {
             <div className="mt-4 flex gap-2">
               <Button onClick={save} loading={createMutation.isPending || updateMutation.isPending}>Save</Button>
               <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleteTarget && isAdmin && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => setDeleteTarget(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-800">Delete shift</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Delete <span className="font-medium">{deleteTarget.name}</span>? Employees assigned to this shift must be
+              reassigned first.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleteMutation.isPending}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                loading={deleteMutation.isPending}
+                onClick={async () => {
+                  try {
+                    await deleteMutation.mutateAsync(deleteTarget._id);
+                    setDeleteTarget(null);
+                  } catch (err) {
+                    alert((err as Error).message);
+                  }
+                }}
+              >
+                Delete
+              </Button>
             </div>
           </div>
         </div>

@@ -1,19 +1,22 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useState } from 'react';
 import { FiFileText } from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { DataTable } from '../../components/DataTable';
 import { AttendanceStatusBadge } from '../../components/attendance/AttendanceStatusBadge';
-import { useEmployee, useRecordsList } from '../../api/attendance';
+import { useDeleteEmployee, useEmployee, useRecordsList } from '../../api/attendance';
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
 import type { AttendanceRecord } from '../../types/attendance';
 
 export function AttendanceEmployeeDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { canManageEmployees } = useAttendancePermissions();
+  const { canManageEmployees, isAdmin } = useAttendancePermissions();
   const { data: employee, isLoading } = useEmployee(id);
   const { data: records } = useRecordsList({ employeeId: id, limit: 30 });
+  const deleteEmployee = useDeleteEmployee();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (isLoading) return <p className="text-slate-500">Loading...</p>;
   if (!employee) return <p className="text-slate-500">Employee not found.</p>;
@@ -39,7 +42,18 @@ export function AttendanceEmployeeDetail() {
           </div>
         </div>
         {canManageEmployees && (
-          <Button onClick={() => navigate(`/dashboard/attendance/employees/${id}/edit`)}>Edit</Button>
+          <div className="flex gap-2">
+            <Button onClick={() => navigate(`/dashboard/attendance/employees/${id}/edit`)}>Edit</Button>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                className="border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                onClick={() => setDeleteOpen(true)}
+              >
+                Delete
+              </Button>
+            )}
+          </div>
         )}
       </div>
       <Card className="mb-6">
@@ -136,6 +150,44 @@ export function AttendanceEmployeeDetail() {
           )}
         />
       </Card>
+
+      {deleteOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => setDeleteOpen(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-800">Delete employee</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Are you sure you want to delete{' '}
+              <span className="font-medium">{employee.fullName}</span> ({employee.employeeCode})?
+              This permanently removes all attendance records, leaves, and payroll adjustments for this employee.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleteEmployee.isPending}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                loading={deleteEmployee.isPending}
+                onClick={async () => {
+                  try {
+                    await deleteEmployee.mutateAsync(employee._id);
+                    navigate('/dashboard/attendance/employees');
+                  } catch (err) {
+                    alert((err as Error).message);
+                  }
+                }}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

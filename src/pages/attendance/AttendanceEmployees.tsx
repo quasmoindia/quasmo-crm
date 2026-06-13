@@ -4,18 +4,20 @@ import { FiPlus, FiUpload } from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { DataTable } from '../../components/DataTable';
-import { useEmployeesList, useImportEmployees } from '../../api/attendance';
+import { useDeleteEmployee, useEmployeesList, useImportEmployees } from '../../api/attendance';
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
 import type { Employee } from '../../types/attendance';
 
 export function AttendanceEmployees() {
   const navigate = useNavigate();
-  const { canManageEmployees } = useAttendancePermissions();
+  const { canManageEmployees, isAdmin } = useAttendancePermissions();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
   const { data, isLoading } = useEmployeesList({ search: searchQuery, page, limit: 20 });
   const importMutation = useImportEmployees();
+  const deleteEmployee = useDeleteEmployee();
 
   const handleCsvImport = () => {
     const input = document.createElement('input');
@@ -82,13 +84,24 @@ export function AttendanceEmployees() {
           isLoading={isLoading}
           emptyMessage="No employees found."
           renderActions={(e) => (
-            <button
-              type="button"
-              className="text-sm text-[#305dff] hover:underline"
-              onClick={() => navigate(`/dashboard/attendance/employees/${e._id}`)}
-            >
-              View
-            </button>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="text-sm text-[#305dff] hover:underline"
+                onClick={() => navigate(`/dashboard/attendance/employees/${e._id}`)}
+              >
+                View
+              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="text-sm text-red-600 hover:underline"
+                  onClick={() => setDeleteTarget(e)}
+                >
+                  Delete
+                </button>
+              )}
+            </div>
           )}
         />
       </Card>
@@ -97,6 +110,44 @@ export function AttendanceEmployees() {
           Imported {importMutation.data.created}. Errors: {importMutation.data.errors.join('; ')}
         </div>
       ) : null}
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => setDeleteTarget(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(ev) => ev.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-800">Delete employee</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Are you sure you want to delete{' '}
+              <span className="font-medium">{deleteTarget.fullName}</span> ({deleteTarget.employeeCode})?
+              This permanently removes all attendance records, leaves, and payroll adjustments.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleteEmployee.isPending}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                loading={deleteEmployee.isPending}
+                onClick={async () => {
+                  try {
+                    await deleteEmployee.mutateAsync(deleteTarget._id);
+                    setDeleteTarget(null);
+                  } catch (err) {
+                    alert((err as Error).message);
+                  }
+                }}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -22,6 +22,7 @@ export function useAttendancePermissions() {
     sidebarNavItems,
     canAccessNav: (permission: AttendanceNavPermission) =>
       canAccessAttendanceNavItem(permission, navAccess),
+    isAdmin: role === 'admin',
     canManageEmployees: !!role && HR_ROLES.has(role),
     canManageSitesShifts: !!role && HR_ROLES.has(role),
     canCorrectRecords: !!role && MANAGER_ROLES.has(role),

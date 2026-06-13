@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { get, post } from '../utils/api';
+import { getStoredToken, setStoredToken } from '../utils/session';
 import type {
   AuthResponse,
   AuthUser,
@@ -23,6 +24,8 @@ export function useCurrentUser() {
   return useQuery({
     queryKey: ['auth', 'me'],
     queryFn: getMeApi,
+    enabled: !!getStoredToken(),
+    retry: false,
   });
 }
 
@@ -42,19 +45,7 @@ export function signUpApi(credentials: SignUpCredentials) {
   return post<AuthResponse>(`${AUTH_BASE}/signup`, credentials);
 }
 
-const TOKEN_KEY = 'token';
-
-export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setStoredToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearStoredToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-}
+export { getStoredToken, setStoredToken, clearStoredToken } from '../utils/session';
 
 export function useLoginMutation() {
   return useMutation({
