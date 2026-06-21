@@ -15,6 +15,7 @@ import {
 import { listLeadsApi, leadsListKey, useLeadsList } from '../api/leads';
 import { Card } from '../components/Card';
 import { canAccessModule } from '../config/roles';
+import { canUseDefaultSelfPunch } from '../config/attendanceAccess';
 import { useAttendanceDashboard } from '../api/attendance';
 import type { ComplaintStatus } from '../types/complaint';
 import { STATUS_OPTIONS } from '../types/complaint';
@@ -84,6 +85,7 @@ export function Dashboard() {
   const canInvoices = canAccessModule(role, 'invoices', roleModules);
   const canRoles = canAccessModule(role, 'roles', roleModules);
   const canAttendance = canAccessModule(role, 'attendance', roleModules);
+  const canSelfPunch = canUseDefaultSelfPunch(role);
 
   const { data: attendanceData, isLoading: attendanceLoading } = useAttendanceDashboard(canAttendance);
 
@@ -122,7 +124,7 @@ export function Dashboard() {
   const recentLeads: Lead[] = leadsRecent.data?.data ?? [];
 
   const hasAnyModule =
-    canComplaints || canLeads || canUsers || canInvoices || canRoles || canAttendance;
+    canComplaints || canLeads || canUsers || canInvoices || canRoles || canAttendance || canSelfPunch;
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -207,6 +209,13 @@ export function Dashboard() {
                 <li>
                   <Link className="text-indigo-600 hover:text-indigo-800 hover:underline" to="/dashboard/roles">
                     Role management →
+                  </Link>
+                </li>
+              )}
+              {canSelfPunch && (
+                <li>
+                  <Link className="text-indigo-600 hover:text-indigo-800 hover:underline" to="/dashboard/attendance/my-punch">
+                    Punch attendance →
                   </Link>
                 </li>
               )}

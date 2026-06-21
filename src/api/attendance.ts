@@ -3,6 +3,8 @@ import { get, post, patch, del } from '../utils/api';
 import { API_BASE_URL } from '../utils/constants';
 import type {
   AdjustmentType,
+  AdjustmentAppliesTo,
+  PayComponent,
   AttendanceDashboard,
   AttendanceRecord,
   AttendanceSettings,
@@ -20,7 +22,9 @@ import type {
   PayrollAdjustment,
   PayrollEmployeeDetail,
   PayrollReport,
+  PunchResult,
   RosterToday,
+  SelfPunchContext,
   Shift,
   WorkSite,
 } from '../types/attendance';
@@ -301,11 +305,17 @@ export function useCorrectSession() {
   });
 }
 
-export function usePayrollReport(params?: { dateFrom?: string; dateTo?: string; department?: string }) {
+export function usePayrollReport(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+  department?: string;
+  payComponent?: PayComponent;
+}) {
   const queryParams: Record<string, string> = {};
   if (params?.dateFrom) queryParams.dateFrom = params.dateFrom;
   if (params?.dateTo) queryParams.dateTo = params.dateTo;
   if (params?.department) queryParams.department = params.department;
+  if (params?.payComponent) queryParams.payComponent = params.payComponent;
   return useQuery({
     queryKey: ['attendance', 'payroll', params],
     queryFn: () => get<PayrollReport>(`${BASE}/reports/payroll`, { params: queryParams }),
@@ -314,13 +324,18 @@ export function usePayrollReport(params?: { dateFrom?: string; dateTo?: string; 
 
 export function usePayrollEmployeeDetail(
   employeeId: string | null,
-  params: { dateFrom: string; dateTo: string }
+  params: { dateFrom: string; dateTo: string; payComponent?: PayComponent }
 ) {
+  const queryParams: Record<string, string> = {
+    dateFrom: params.dateFrom,
+    dateTo: params.dateTo,
+  };
+  if (params.payComponent) queryParams.payComponent = params.payComponent;
   return useQuery({
     queryKey: ['attendance', 'payroll-detail', employeeId, params],
     queryFn: () =>
       get<PayrollEmployeeDetail>(`${BASE}/reports/payroll/employee/${employeeId}`, {
-        params: { dateFrom: params.dateFrom, dateTo: params.dateTo },
+        params: queryParams,
       }),
     enabled: !!employeeId,
   });
@@ -340,8 +355,14 @@ export function usePayrollAdjustments(params: { month?: string; employeeId?: str
 export function useCreateAdjustment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { employeeId: string; month: string; type: AdjustmentType; amount: number; note?: string }) =>
-      post<PayrollAdjustment>(`${BASE}/payroll/adjustments`, payload),
+    mutationFn: (payload: {
+      employeeId: string;
+      month: string;
+      type: AdjustmentType;
+      amount: number;
+      note?: string;
+      appliesTo?: AdjustmentAppliesTo;
+    }) => post<PayrollAdjustment>(`${BASE}/payroll/adjustments`, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['attendance', 'adjustments'] });
       qc.invalidateQueries({ queryKey: ['attendance', 'payroll'] });
@@ -443,13 +464,19 @@ export function useDeleteHoliday() {
   });
 }
 
-export async function downloadPayrollExport(params: { dateFrom?: string; dateTo?: string; department?: string }) {
+export async function downloadPayrollExport(params: {
+  dateFrom?: string;
+  dateTo?: string;
+  department?: string;
+  payComponent?: PayComponent;
+}) {
   const token = localStorage.getItem('token');
   const base = API_BASE_URL.replace(/\/$/, '');
   const qs = new URLSearchParams();
   if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
   if (params.dateTo) qs.set('dateTo', params.dateTo);
   if (params.department) qs.set('department', params.department);
+  if (params.payComponent) qs.set('payComponent', params.payComponent);
   const q = qs.toString();
   const url = `${base}/${BASE.replace(/^\//, '')}/reports/payroll/export${q ? `?${q}` : ''}`;
   const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
@@ -622,6 +649,58 @@ export function useUpdateAttendanceSettings() {
       qc.invalidateQueries({ queryKey: ['attendance', 'punch-context'] });
     },
   });
+}
+
+// ─── Self punch (logged-in CRM user linked to employee — no attendance module required) ───
+
+const SELF = `${BASE}/punch/self`;
+
+export function useSelfContext(enabled = true) {
+  return useQuery({
+    queryKey: ['attendance', 'self-context'],
+    queryFn: () => get<SelfPunchContext>(`${SELF}/context`),
+    enabled,
+  });
+}
+
+export async function selfPunchPreviewApi(payload: {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+}) {
+  return post<GeofencePreview>(`${SELF}/preview`, payload);
+}
+
+export async function selfPunchInApi(payload: {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  selfie: Blob;
+  clientTimestamp?: string;
+}) {
+  const form = new FormData();
+  form.append('latitude', String(payload.latitude));
+  form.append('longitude', String(payload.longitude));
+  form.append('accuracy', String(payload.accuracy));
+  form.append('selfie', payload.selfie, 'selfie.jpg');
+  if (payload.clientTimestamp) form.append('clientTimestamp', payload.clientTimestamp);
+  return crmMultipart<PunchResult>(`${SELF}/in`, form);
+}
+
+export async function selfPunchOutApi(payload: {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  selfie: Blob;
+  clientTimestamp?: string;
+}) {
+  const form = new FormData();
+  form.append('latitude', String(payload.latitude));
+  form.append('longitude', String(payload.longitude));
+  form.append('accuracy', String(payload.accuracy));
+  form.append('selfie', payload.selfie, 'selfie.jpg');
+  if (payload.clientTimestamp) form.append('clientTimestamp', payload.clientTimestamp);
+  return crmMultipart<PunchResult>(`${SELF}/out`, form);
 }
 
 // ─── Punch API (public / employee token) ─────────────────────────────────────

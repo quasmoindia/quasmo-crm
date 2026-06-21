@@ -6,7 +6,7 @@
 /** Role id -> module ids ('*' = all modules) */
 export const ROLE_MODULE_MAP: Record<string, readonly string[]> = {
   admin: ['*'],
-  user: ['dashboard', 'complaints', 'leads', 'invoices', 'expenses', 'products', 'customers', 'orders', 'documents', 'tenders'],
+  user: ['dashboard', 'complaints', 'leads', 'invoices', 'expenses', 'products', 'customers', 'orders', 'documents', 'tenders', 'tradeindia_inquiries', 'indiamart_leads'],
   viewer: ['dashboard'],
   // content_writer: ['dashboard', 'content'],
   // sales_manager: ['dashboard', 'sales', 'leads'],
@@ -30,6 +30,8 @@ export const MODULE_LABELS: Record<string, string> = {
   documents: 'Documents',
   attendance: 'Employee attendance',
   tenders: 'Tender management',
+  tradeindia_inquiries: 'TradeIndia inquiries',
+  indiamart_leads: 'IndiaMART leads',
 };
 
 /** Role id -> display label (fallback if API not used) */
@@ -64,6 +66,8 @@ export const NAV_MODULES: NavModule[] = [
   { moduleId: 'orders', label: 'Order Management', path: '/dashboard/orders', end: false },
   { moduleId: 'complaints', label: 'Complaint management', path: '/dashboard/complaints', end: false },
   { moduleId: 'tenders', label: 'Tender management', path: '/dashboard/tenders', end: false },
+  { moduleId: 'tradeindia_inquiries', label: 'TradeIndia inquiries', path: '/dashboard/tradeindia-inquiries', end: false },
+  { moduleId: 'indiamart_leads', label: 'IndiaMART leads', path: '/dashboard/indiamart-leads', end: false },
   { moduleId: 'expenses', label: 'Expenses', path: '/dashboard/expenses', end: false },
   { moduleId: 'documents', label: 'Documents', path: '/dashboard/documents', end: false },
   { moduleId: 'attendance', label: 'Employee attendance', path: '/dashboard/attendance', end: false },

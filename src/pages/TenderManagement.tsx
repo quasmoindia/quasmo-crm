@@ -100,6 +100,28 @@ export function TenderManagement() {
           <span className="text-slate-400">—</span>
         ),
     },
+    {
+      key: 'modelNumber',
+      label: 'Model No.',
+      render: (t: Tender) =>
+        t.modelNumber ? (
+          <span className="font-mono text-xs text-slate-700">{t.modelNumber}</span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
+    {
+      key: 'itemQuoted',
+      label: 'Item Quoted',
+      render: (t: Tender) =>
+        t.itemQuoted ? (
+          <span className="block max-w-[12rem] truncate text-slate-700" title={t.itemQuoted}>
+            {t.itemQuoted}
+          </span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
     ...(isAdmin
       ? [
           {
@@ -249,26 +271,28 @@ export function TenderManagement() {
               }
               isLoading={isLoading}
               emptyMessage="No tenders match your filters. Try clearing filters or broadening your search."
-              renderActions={(tender) => (
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-[#305dff]/30 hover:bg-[#305dff]/5 hover:text-[#305dff]"
-                    onClick={() => setEditTarget(tender)}
-                  >
-                    Edit
-                  </button>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100"
-                      onClick={() => setDeleteTarget(tender)}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              )}
+              renderActions={
+                isAdmin
+                  ? (tender) => (
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-[#305dff]/30 hover:bg-[#305dff]/5 hover:text-[#305dff]"
+                          onClick={() => setEditTarget(tender)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100"
+                          onClick={() => setDeleteTarget(tender)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )
+                  : undefined
+              }
             />
           </div>
         )}
@@ -287,7 +311,7 @@ export function TenderManagement() {
         />
       )}
 
-      {editTarget && (
+      {editTarget && isAdmin ? (
         <TenderFormModal
           title="Edit tender"
           initial={editTarget}
@@ -299,7 +323,7 @@ export function TenderManagement() {
             setEditTarget(null);
           }}
         />
-      )}
+      ) : null}
 
       {deleteTarget && (
         <div
@@ -372,6 +396,8 @@ function TenderFormModal({
   const [tenderNo, setTenderNo] = useState(initial?.tenderNo ?? '');
   const [location, setLocation] = useState(initial?.location ?? '');
   const [department, setDepartment] = useState(initial?.department ?? '');
+  const [modelNumber, setModelNumber] = useState(initial?.modelNumber ?? '');
+  const [itemQuoted, setItemQuoted] = useState(initial?.itemQuoted ?? '');
   const [priceQuoted, setPriceQuoted] = useState(initial?.priceQuoted != null ? String(initial.priceQuoted) : '');
   const [error, setError] = useState<string | null>(null);
   const isCreate = initial == null;
@@ -409,6 +435,8 @@ function TenderFormModal({
               tenderNo: tenderNo.trim(),
               location: location.trim() || undefined,
               department: department.trim() || undefined,
+              modelNumber: modelNumber.trim() || undefined,
+              itemQuoted: itemQuoted.trim() || undefined,
             };
             if (showPricing || isCreate) {
               const numPrice = parseFloat(priceQuoted);
@@ -453,6 +481,23 @@ function TenderFormModal({
               onChange={(e) => setDepartment(e.target.value)}
               disabled={isSaving}
               placeholder="e.g. Sales"
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Model number"
+              value={modelNumber}
+              onChange={(e) => setModelNumber(e.target.value)}
+              disabled={isSaving}
+              placeholder="e.g. QSM-4500"
+            />
+            <Input
+              label="Item quoted"
+              value={itemQuoted}
+              onChange={(e) => setItemQuoted(e.target.value)}
+              disabled={isSaving}
+              placeholder="Product or service quoted"
             />
           </div>
 

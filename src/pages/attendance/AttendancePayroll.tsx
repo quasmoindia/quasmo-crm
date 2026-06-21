@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FiDownload } from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -12,8 +12,24 @@ import {
   usePayrollEmployeeDetail,
   usePayrollReport,
 } from '../../api/attendance';
+import {
+  APPLIES_TO_LABELS,
+  PAY_COMPONENT_HINTS,
+  PAY_COMPONENT_OPTIONS,
+  buildDeductionLines,
+  buildEarningsLines,
+  defaultAppliesTo,
+  payComponentLabel,
+  rowHasPayData,
+} from '../../config/payrollComponent';
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
-import type { AdjustmentType, PayrollDayDetail, PayrollRow } from '../../types/attendance';
+import type {
+  AdjustmentAppliesTo,
+  AdjustmentType,
+  PayComponent,
+  PayrollDayDetail,
+  PayrollRow,
+} from '../../types/attendance';
 
 function hoursLabel(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -23,30 +39,60 @@ function hoursLabel(minutes: number) {
 const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export function AttendancePayroll() {
+export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) {
   const { canExport, canManageEmployees } = useAttendancePermissions();
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = `${today.slice(0, 8)}01`;
   const [dateFrom, setDateFrom] = useState(monthStart);
   const [dateTo, setDateTo] = useState(today);
   const [department, setDepartment] = useState('');
+  const [search, setSearch] = useState('');
+  const [payComponent, setPayComponent] = useState<PayComponent>('regular');
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [payslipRow, setPayslipRow] = useState<PayrollRow | null>(null);
   const [detailRow, setDetailRow] = useState<PayrollRow | null>(null);
-  const { data, isLoading } = usePayrollReport({ dateFrom, dateTo, department: department || undefined });
+  const { data, isLoading, error } = usePayrollReport({
+    dateFrom,
+    dateTo,
+    department: department || undefined,
+    payComponent,
+  });
 
   const month = dateFrom.slice(0, 7);
+  const invalidRange = dateFrom > dateTo;
+
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return (data?.rows ?? []).filter((row) => {
+      if (!rowHasPayData(row, payComponent)) return false;
+      if (!query) return true;
+      return (
+        row.fullName.toLowerCase().includes(query) ||
+        row.employeeCode.toLowerCase().includes(query) ||
+        row.department.toLowerCase().includes(query)
+      );
+    });
+  }, [data?.rows, payComponent, search]);
 
   const handleExport = async () => {
     setExporting(true);
+    setExportError(null);
     try {
-      const blob = await downloadPayrollExport({ dateFrom, dateTo, department: department || undefined });
+      const blob = await downloadPayrollExport({
+        dateFrom,
+        dateTo,
+        department: department || undefined,
+        payComponent,
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `payroll-${dateFrom}-${dateTo}.csv`;
+      a.download = `payroll-${payComponent}-${dateFrom}-${dateTo}.csv`;
       a.click();
       URL.revokeObjectURL(url);
+    } catch {
+      setExportError('Payroll export failed. Try again or check your permissions.');
     } finally {
       setExporting(false);
     }
@@ -58,15 +104,24 @@ export function AttendancePayroll() {
   return (
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Payroll</h1>
+        {!embedded ? (
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">Payroll</h1>
+            <p className="text-sm text-slate-500">
+              Daily worked hours (rounded to 15 min) up to {policy?.standardHoursPerDay ?? 8}h are paid at the
+              normal rate; beyond that is
+              {policy?.overtimeEnabled === false ? ' also normal (OT off)' : ` overtime at ${policy?.overtimeMultiplier ?? 1.5}×`}
+              . Deductions &amp; rates are set in Settings.
+            </p>
+          </div>
+        ) : (
           <p className="text-sm text-slate-500">
             Daily worked hours (rounded to 15 min) up to {policy?.standardHoursPerDay ?? 8}h are paid at the
             normal rate; beyond that is
             {policy?.overtimeEnabled === false ? ' also normal (OT off)' : ` overtime at ${policy?.overtimeMultiplier ?? 1.5}×`}
             . Deductions &amp; rates are set in Settings.
           </p>
-        </div>
+        )}
         {canExport && (
           <Button onClick={handleExport} loading={exporting}>
             <FiDownload className="size-4" /> Export CSV
@@ -74,16 +129,41 @@ export function AttendancePayroll() {
         )}
       </div>
 
+      <Card className="mb-4">
+        <p className="mb-3 text-sm font-semibold text-slate-700">Pay run type</p>
+        <div className="flex flex-wrap gap-2">
+          {PAY_COMPONENT_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setPayComponent(option.id)}
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                payComponent === option.id
+                  ? 'bg-[#305dff] text-white'
+                  : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-3 text-sm text-slate-500">{PAY_COMPONENT_HINTS[payComponent]}</p>
+      </Card>
+
       <Card className="mb-6">
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-4">
           <Input label="From" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           <Input label="To" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           <Input label="Department" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Optional" />
+          <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, code, department" />
         </div>
+        {invalidRange ? <p className="mt-3 text-sm text-rose-600">Start date must be on or before the end date.</p> : null}
+        {error ? <p className="mt-3 text-sm text-rose-600">Could not load payroll. Refresh the page or try another period.</p> : null}
+        {exportError ? <p className="mt-3 text-sm text-rose-600">{exportError}</p> : null}
       </Card>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryTile label="Employees" value={String(totals?.employees ?? 0)} />
+        <SummaryTile label="In this run" value={String(filteredRows.length)} />
         <SummaryTile label="Gross" value={inr(totals?.gross ?? 0)} />
         <SummaryTile label="Deductions" value={inr(totals?.totalDeductions ?? 0)} />
         <SummaryTile label="Net payout" value={inr(totals?.netPay ?? 0)} accent />
@@ -106,10 +186,18 @@ export function AttendancePayroll() {
             { key: 'ded', label: 'Deductions', render: (r) => (r.totalDeductions > 0 ? <span className="text-rose-600">−{inr(r.totalDeductions)}</span> : '—') },
             { key: 'net', label: 'Net pay', render: (r) => <span className="font-semibold">{inr(r.netPay)}</span> },
           ]}
-          data={data?.rows ?? []}
+          data={filteredRows}
           rowKey={(r) => r.employeeId}
           isLoading={isLoading}
-          emptyMessage="No payroll data for this period."
+          emptyMessage={
+            (data?.rows ?? []).length === 0
+              ? 'No payroll data for this period.'
+              : payComponent === 'overtime'
+                ? 'No overtime amounts found for this period.'
+                : payComponent === 'regular'
+                  ? 'No regular wages found for this period.'
+                  : 'No employees match this pay run or search.'
+          }
           renderActions={(r) => (
             <div className="flex gap-3">
               <button type="button" className="text-sm text-[#305dff] hover:underline" onClick={() => setDetailRow(r)}>
@@ -128,6 +216,7 @@ export function AttendancePayroll() {
           employeeId={detailRow.employeeId}
           dateFrom={dateFrom}
           dateTo={dateTo}
+          payComponent={payComponent}
           onClose={() => setDetailRow(null)}
         />
       )}
@@ -137,6 +226,7 @@ export function AttendancePayroll() {
           row={payslipRow}
           month={month}
           period={`${dateFrom} to ${dateTo}`}
+          payComponent={payComponent}
           canEdit={canManageEmployees}
           overtimeMultiplier={policy?.overtimeMultiplier ?? 1.5}
           onClose={() => setPayslipRow(null)}
@@ -166,14 +256,16 @@ function PayrollDetailModal({
   employeeId,
   dateFrom,
   dateTo,
+  payComponent,
   onClose,
 }: {
   employeeId: string;
   dateFrom: string;
   dateTo: string;
+  payComponent: PayComponent;
   onClose: () => void;
 }) {
-  const { data, isLoading } = usePayrollEmployeeDetail(employeeId, { dateFrom, dateTo });
+  const { data, isLoading, error } = usePayrollEmployeeDetail(employeeId, { dateFrom, dateTo, payComponent });
 
   const perDayFormula = (() => {
     if (!data) return '';
@@ -188,31 +280,16 @@ function PayrollDetailModal({
   const s = data?.summary;
 
   const earnings = s
-    ? [
-        { label: 'Regular wages', value: s.regularAmount },
-        { label: `Overtime (${data!.policy.overtimeMultiplier}×)`, value: s.overtimeAmount },
-        { label: `Paid leave (${s.paidLeaveDays}d)`, value: s.paidLeaveAmount },
-        { label: `Weekly off (${data!.employee.payType === 'monthly' ? s.weekOffDays : 0}d)`, value: s.weeklyOffAmount },
-        { label: `Holidays (${s.holidayDays}d)`, value: s.holidayAmount },
-        { label: 'Bonus', value: s.bonus },
-      ].filter((x) => x.value > 0)
+    ? buildEarningsLines(s, payComponent, data!.policy.overtimeMultiplier)
     : [];
 
-  const deductions = s
-    ? [
-        { label: 'Provident Fund (PF)', value: s.pf },
-        { label: 'ESI', value: s.esi },
-        { label: 'Professional Tax', value: s.pt },
-        { label: 'Advance recovery', value: s.advance },
-        { label: 'Other deduction', value: s.otherDeduction },
-      ].filter((x) => x.value > 0)
-    : [];
+  const deductions = s ? buildDeductionLines(s, payComponent) : [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white p-6">
         {isLoading || !data || !s ? (
-          <p className="text-slate-500">Loading breakdown…</p>
+          error ? <p className="text-rose-600">Could not load payroll breakdown.</p> : <p className="text-slate-500">Loading breakdown…</p>
         ) : (
           <>
             <div className="flex items-start justify-between">
@@ -221,6 +298,9 @@ function PayrollDetailModal({
                 <p className="text-sm text-slate-500">
                   {data.employee.employeeCode} · {data.dateFrom} to {data.dateTo}
                 </p>
+                <span className="mt-2 inline-flex rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                  {payComponentLabel(payComponent)}
+                </span>
               </div>
               <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs capitalize text-slate-600">
                 {data.employee.payType} · ₹{data.employee.payRate}
@@ -259,23 +339,31 @@ function PayrollDetailModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {data.days.map((d) => {
-                    const meta = DAY_TYPE_META[d.type];
-                    return (
-                      <tr key={d.date} className="border-b border-slate-100">
-                        <td className="py-1.5 pr-2 whitespace-nowrap">{d.date.slice(5)}</td>
-                        <td className="py-1.5 pr-2 text-slate-500">{d.day}</td>
-                        <td className="py-1.5 pr-2">
-                          <span className={`rounded px-1.5 py-0.5 ${meta.cls}`}>{meta.label}</span>
-                          {d.note ? <span className="ml-1 capitalize text-slate-400">{d.note}</span> : null}
-                        </td>
-                        <td className="py-1.5 pr-2 text-right">{d.workedMinutes ? mins(d.workedMinutes) : '—'}</td>
-                        <td className="py-1.5 pr-2 text-right">{d.regularMinutes ? mins(d.regularMinutes) : '—'}</td>
-                        <td className="py-1.5 pr-2 text-right text-amber-700">{d.otMinutes ? mins(d.otMinutes) : '—'}</td>
-                        <td className="py-1.5 text-right font-medium">{d.amount ? inr(d.amount) : '—'}</td>
-                      </tr>
-                    );
-                  })}
+                  {data.days.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-4 text-center text-slate-400">
+                        No payable days in this pay run.
+                      </td>
+                    </tr>
+                  ) : (
+                    data.days.map((d) => {
+                      const meta = DAY_TYPE_META[d.type];
+                      return (
+                        <tr key={d.date} className="border-b border-slate-100">
+                          <td className="py-1.5 pr-2 whitespace-nowrap">{d.date.slice(5)}</td>
+                          <td className="py-1.5 pr-2 text-slate-500">{d.day}</td>
+                          <td className="py-1.5 pr-2">
+                            <span className={`rounded px-1.5 py-0.5 ${meta.cls}`}>{meta.label}</span>
+                            {d.note ? <span className="ml-1 capitalize text-slate-400">{d.note}</span> : null}
+                          </td>
+                          <td className="py-1.5 pr-2 text-right">{d.workedMinutes ? mins(d.workedMinutes) : '—'}</td>
+                          <td className="py-1.5 pr-2 text-right">{d.regularMinutes ? mins(d.regularMinutes) : '—'}</td>
+                          <td className="py-1.5 pr-2 text-right text-amber-700">{d.otMinutes ? mins(d.otMinutes) : '—'}</td>
+                          <td className="py-1.5 text-right font-medium">{d.amount ? inr(d.amount) : '—'}</td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -353,6 +441,7 @@ function PayslipModal({
   row,
   month,
   period,
+  payComponent,
   canEdit,
   overtimeMultiplier,
   onClose,
@@ -360,6 +449,7 @@ function PayslipModal({
   row: PayrollRow;
   month: string;
   period: string;
+  payComponent: PayComponent;
   canEdit: boolean;
   overtimeMultiplier: number;
   onClose: () => void;
@@ -368,33 +458,41 @@ function PayslipModal({
   const createAdj = useCreateAdjustment();
   const deleteAdj = useDeleteAdjustment();
   const [type, setType] = useState<AdjustmentType>('bonus');
+  const [appliesTo, setAppliesTo] = useState<AdjustmentAppliesTo>('all');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+
+  useEffect(() => {
+    setAppliesTo(defaultAppliesTo(payComponent));
+  }, [payComponent]);
+
+  const visibleAdjustments = useMemo(() => {
+    const items = adjData?.data ?? [];
+    if (payComponent === 'all') return items;
+    return items.filter((adj) => !adj.appliesTo || adj.appliesTo === 'all' || adj.appliesTo === payComponent);
+  }, [adjData?.data, payComponent]);
 
   const addAdjustment = async () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return;
-    await createAdj.mutateAsync({ employeeId: row.employeeId, month, type, amount: amt, note: note.trim() || undefined });
-    setAmount('');
-    setNote('');
+    try {
+      await createAdj.mutateAsync({
+        employeeId: row.employeeId,
+        month,
+        type,
+        amount: amt,
+        note: note.trim() || undefined,
+        appliesTo,
+      });
+      setAmount('');
+      setNote('');
+    } catch {
+      // mutation error surfaced by react-query if needed
+    }
   };
 
-  const earnings = [
-    { label: 'Regular wages', value: row.regularAmount },
-    { label: `Overtime (${overtimeMultiplier}×)`, value: row.overtimeAmount },
-    { label: `Paid leave (${row.paidLeaveDays}d)`, value: row.paidLeaveAmount },
-    { label: `Weekly off (${row.weeklyOffDays}d)`, value: row.weeklyOffAmount },
-    { label: `Holidays (${row.holidayDays}d)`, value: row.holidayAmount },
-    { label: 'Bonus', value: row.bonus },
-  ].filter((x) => x.value > 0);
-
-  const deductions = [
-    { label: 'Provident Fund (PF)', value: row.pf },
-    { label: 'ESI', value: row.esi },
-    { label: 'Professional Tax', value: row.pt },
-    { label: 'Advance recovery', value: row.advance },
-    { label: 'Other deduction', value: row.otherDeduction },
-  ].filter((x) => x.value > 0);
+  const earnings = buildEarningsLines(row, payComponent, overtimeMultiplier);
+  const deductions = buildDeductionLines(row, payComponent);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -405,6 +503,9 @@ function PayslipModal({
             <p className="text-sm text-slate-500">
               {row.employeeCode} · {period}
             </p>
+            <span className="mt-2 inline-flex rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+              {payComponentLabel(payComponent)}
+            </span>
           </div>
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs capitalize text-slate-600">{row.payType}</span>
         </div>
@@ -465,12 +566,15 @@ function PayslipModal({
         {canEdit && (
           <div className="mt-6 border-t pt-4">
             <h4 className="text-sm font-semibold text-slate-700">Adjustments for {month}</h4>
-            <p className="mb-3 text-xs text-slate-400">Bonus adds to pay; advance &amp; deduction reduce net pay.</p>
+            <p className="mb-3 text-xs text-slate-400">
+              Bonus adds to pay; advance &amp; deduction reduce net pay. Choose which payroll run each item applies to.
+            </p>
             <div className="space-y-2">
-              {(adjData?.data ?? []).map((a) => (
+              {visibleAdjustments.map((a) => (
                 <div key={a._id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
                   <span>
                     <span className="capitalize">{a.type}</span> · {inr(a.amount)}
+                    <span className="text-slate-400"> · {APPLIES_TO_LABELS[a.appliesTo ?? 'all']}</span>
                     {a.note ? <span className="text-slate-400"> · {a.note}</span> : null}
                   </span>
                   <button type="button" className="text-xs text-rose-600 hover:underline" onClick={() => deleteAdj.mutate(a._id)}>
@@ -478,16 +582,25 @@ function PayslipModal({
                   </button>
                 </div>
               ))}
-              {(adjData?.data ?? []).length === 0 && <p className="text-sm text-slate-400">None yet.</p>}
+              {visibleAdjustments.length === 0 && <p className="text-sm text-slate-400">None for this pay run yet.</p>}
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
               <select className="rounded-lg border border-slate-300 px-2 py-2 text-sm" value={type} onChange={(e) => setType(e.target.value as AdjustmentType)}>
                 <option value="bonus">Bonus</option>
                 <option value="advance">Advance</option>
                 <option value="deduction">Deduction</option>
               </select>
+              <select
+                className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                value={appliesTo}
+                onChange={(e) => setAppliesTo(e.target.value as AdjustmentAppliesTo)}
+              >
+                <option value="all">All runs</option>
+                <option value="regular">Regular run</option>
+                <option value="overtime">OT run</option>
+              </select>
               <input className="rounded-lg border border-slate-300 px-2 py-2 text-sm" type="number" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              <input className="col-span-2 rounded-lg border border-slate-300 px-2 py-2 text-sm sm:col-span-1" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+              <input className="rounded-lg border border-slate-300 px-2 py-2 text-sm" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
               <Button onClick={addAdjustment} loading={createAdj.isPending}>Add</Button>
             </div>
           </div>

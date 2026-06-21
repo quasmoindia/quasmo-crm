@@ -51,7 +51,7 @@ function leaveDays(l: Leave) {
   return Math.round((b.getTime() - a.getTime()) / 86400000) + 1;
 }
 
-export function AttendanceReports() {
+export function AttendanceReports({ embedded = false }: { embedded?: boolean }) {
   const { canExport } = useAttendancePermissions();
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = `${today.slice(0, 8)}01`;
@@ -87,12 +87,18 @@ export function AttendanceReports() {
   return (
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Reports</h1>
+        {!embedded ? (
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">Reports</h1>
+            <p className="text-sm text-slate-500">
+              Attendance punches and applied leaves for the selected period.
+            </p>
+          </div>
+        ) : (
           <p className="text-sm text-slate-500">
             Attendance punches and applied leaves for the selected period.
           </p>
-        </div>
+        )}
         {canExport && (
           <Button onClick={handleExport} loading={exporting}>
             <FiDownload className="size-4" /> Export CSV

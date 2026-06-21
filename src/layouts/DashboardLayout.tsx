@@ -20,20 +20,23 @@ import {
   FiX,
   FiClock,
   FiBriefcase,
+  FiGlobe,
+  FiShoppingBag,
 } from 'react-icons/fi';
 import { clearStoredToken, useCurrentUser } from '../api/auth';
 import {
   canAccessAttendancePath,
   getVisibleAttendanceNavItems,
 } from '../config/attendanceNav';
+import { canUseDefaultSelfPunch, getAttendanceModuleTitle, isSelfPunchPath } from '../config/attendanceAccess';
 import { canAccessModule, NAV_MODULES, getModuleIdFromPath } from '../config/roles';
 import { useKioskMode } from '../hooks/useKioskMode';
 
 const NAV_SECTIONS = [
   { title: null, moduleIds: ['dashboard'] },
-  { title: 'Sales & CRM', moduleIds: ['leads', 'customers', 'complaints', 'tenders'] },
+  { title: 'Sales & CRM', moduleIds: ['leads', 'customers', 'complaints', 'tenders', 'tradeindia_inquiries', 'indiamart_leads'] },
   { title: 'Products & Inventory', moduleIds: ['products', 'orders', 'documents'] },
-  { title: 'HR & Attendance', moduleIds: ['attendance'] },
+  { title: null, moduleIds: ['attendance'] },
   { title: 'Operations', moduleIds: ['invoices', 'expenses', 'users', 'roles'] },
 ] as const;
 
@@ -43,6 +46,8 @@ const navIconsByModuleId: Record<string, IconType> = {
   customers: FiUsers,
   complaints: FiAlertCircle,
   tenders: FiBriefcase,
+  tradeindia_inquiries: FiGlobe,
+  indiamart_leads: FiShoppingBag,
   products: FiBox,
   orders: FiShoppingCart,
   documents: FiFileText,
@@ -63,11 +68,16 @@ export function DashboardLayout() {
     : NAV_MODULES;
 
   const currentModuleId = getModuleIdFromPath(location.pathname);
+  const onSelfPunchPath = isSelfPunchPath(location.pathname);
   const canAccessCurrent =
-    !currentModuleId || !user || canAccessModule(user.role, currentModuleId, user.roleModules);
+    !currentModuleId ||
+    !user ||
+    (onSelfPunchPath && canUseDefaultSelfPunch(user.role)) ||
+    canAccessModule(user.role, currentModuleId, user.roleModules);
   const redirectToDashboard = user && currentModuleId && !canAccessCurrent;
   const canAttendanceModule =
     !!user && canAccessModule(user.role, 'attendance', user.roleModules);
+  const canSelfPunchNav = !!user && canUseDefaultSelfPunch(user.role);
   const attendanceSidebarItems = getVisibleAttendanceNavItems(user?.role);
   const attendanceRouteForbidden =
     !!user &&
@@ -75,6 +85,7 @@ export function DashboardLayout() {
     !canAccessAttendancePath(location.pathname, user.role);
   const attendanceFallbackPath =
     attendanceSidebarItems[0]?.path ?? '/dashboard';
+  const attendanceSectionTitle = getAttendanceModuleTitle(user?.role);
   const navByModuleId = new Map(visibleNavItems.map((item) => [item.moduleId, item]));
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -118,7 +129,8 @@ export function DashboardLayout() {
       </div>
       <nav className="flex flex-1 flex-col gap-5 overflow-y-auto p-3.5">
         {NAV_SECTIONS.map((section) => {
-          const isAttendanceSection = section.title === 'HR & Attendance';
+          const isAttendanceSection = section.moduleIds.includes('attendance');
+          const sectionTitle = isAttendanceSection ? attendanceSectionTitle : section.title;
 
           const sectionItems = section.moduleIds
             .filter((moduleId) => moduleId !== 'attendance')
@@ -126,15 +138,15 @@ export function DashboardLayout() {
             .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
           const showAttendance =
-            isAttendanceSection && canAttendanceModule && attendanceSidebarItems.length > 0;
+            isAttendanceSection && (canSelfPunchNav || (canAttendanceModule && attendanceSidebarItems.length > 0));
 
           if (!sectionItems.length && !showAttendance) return null;
 
           return (
-            <div key={section.title ?? 'root'} className="space-y-2">
-              {section.title ? (
+            <div key={isAttendanceSection ? 'attendance' : section.title ?? 'root'} className="space-y-2">
+              {sectionTitle ? (
                 <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  {section.title}
+                  {sectionTitle}
                 </p>
               ) : null}
               <div className="space-y-1">
@@ -160,7 +172,7 @@ export function DashboardLayout() {
                   );
                 })}
                 {showAttendance
-                  ? attendanceSidebarItems.map(({ path, label, end, icon: Icon }) => (
+                  ? attendanceSidebarItems.map(({ path, label, end, icon: Icon, activePaths }) => (
                       <NavLink
                         key={path}
                         to={path}
@@ -168,7 +180,7 @@ export function DashboardLayout() {
                         onClick={() => setDrawerOpen(false)}
                         className={({ isActive }) =>
                           `flex items-center gap-3 rounded-xl py-2 pl-4 pr-3 text-sm font-medium transition-all ${
-                            isActive
+                            (activePaths ? activePaths.includes(location.pathname) : isActive)
                               ? 'bg-linear-to-r from-[#3f51ff] to-[#305dff] text-white shadow-[0_8px_20px_rgba(59,93,255,0.35)]'
                               : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                           }`
