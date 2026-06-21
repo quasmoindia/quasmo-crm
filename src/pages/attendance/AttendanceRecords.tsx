@@ -37,7 +37,7 @@ function fromLocalInput(value: string): string {
   return new Date(value).toISOString();
 }
 
-export function AttendanceRecords() {
+export function AttendanceRecords({ embedded = false }: { embedded?: boolean }) {
   const { canCorrectRecords } = useAttendancePermissions();
   const [page, setPage] = useState(1);
   const [workDate, setWorkDate] = useState('');
@@ -62,7 +62,7 @@ export function AttendanceRecords() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-slate-800">Punch log</h1>
+      {!embedded ? <h1 className="mb-6 text-2xl font-bold text-slate-800">Punch log</h1> : null}
       <Card>
         <div className="mb-4 flex flex-wrap gap-3">
           <Input label="Work date" type="date" value={workDate} onChange={(e) => { setWorkDate(e.target.value); setPage(1); }} />

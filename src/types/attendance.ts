@@ -203,6 +203,11 @@ export interface GeofencePreview {
   maxGpsAccuracyMeters?: number;
 }
 
+export interface PunchResult {
+  record: AttendanceRecord;
+  preview: GeofencePreview;
+}
+
 export interface PunchShiftSummary {
   _id: string;
   name: string;
@@ -314,6 +319,7 @@ export interface PayrollRow {
 export interface PayrollReport {
   dateFrom: string;
   dateTo: string;
+  payComponent?: PayComponent;
   rows: PayrollRow[];
   totals: {
     employees: number;
@@ -345,6 +351,8 @@ export interface PayrollReport {
 }
 
 export type AdjustmentType = 'bonus' | 'advance' | 'deduction';
+export type PayComponent = 'all' | 'regular' | 'overtime';
+export type AdjustmentAppliesTo = 'all' | 'regular' | 'overtime';
 
 export interface PayrollAdjustment {
   _id: string;
@@ -352,6 +360,7 @@ export interface PayrollAdjustment {
   month: string;
   type: AdjustmentType;
   amount: number;
+  appliesTo?: AdjustmentAppliesTo;
   note?: string;
   createdAt: string;
 }
@@ -365,6 +374,8 @@ export interface PayrollDayDetail {
   otMinutes: number;
   hourlyRate: number;
   amount: number;
+  regularPart?: number;
+  overtimePart?: number;
   note?: string;
 }
 
@@ -372,6 +383,7 @@ export interface PayrollEmployeeDetail {
   employee: { _id: string; fullName: string; employeeCode: string; department?: string; payType: PayType; payRate: number };
   dateFrom: string;
   dateTo: string;
+  payComponent?: PayComponent;
   policy: {
     standardHoursPerDay: number;
     overtimeEnabled: boolean;
@@ -402,6 +414,7 @@ export interface PayrollEmployeeDetail {
     holidayAmount: number;
     basicWages: number;
     gross: number;
+    grossFull?: number;
     pf: number;
     esi: number;
     pt: number;
@@ -411,7 +424,7 @@ export interface PayrollEmployeeDetail {
     totalDeductions: number;
     netPay: number;
   };
-  adjustments: { _id: string; type: AdjustmentType; amount: number; note?: string; month: string }[];
+  adjustments: { _id: string; type: AdjustmentType; amount: number; note?: string; month: string; appliesTo?: AdjustmentAppliesTo }[];
 }
 
 export type LeaveType = 'casual' | 'sick' | 'earned' | 'unpaid';

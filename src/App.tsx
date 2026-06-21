@@ -11,6 +11,8 @@ import { ComplaintManagement } from './pages/ComplaintManagement';
 import { LeadManagement } from './pages/LeadManagement';
 import { TaxInvoiceManagement } from './pages/TaxInvoiceManagement';
 import { TenderManagement } from './pages/TenderManagement';
+import { TradeIndiaInquiries } from './pages/TradeIndiaInquiries';
+import { IndiaMartLeads } from './pages/IndiaMartLeads';
 import { ExpenseManagement } from './pages/ExpenseManagement';
 import { ProductList } from './pages/ProductList';
 import { AddProduct } from './pages/AddProduct';
@@ -21,17 +23,15 @@ import { AddCustomer } from './pages/AddCustomer';
 import { OrderProcessing } from './pages/OrderProcessing';
 import { AddOrder } from './pages/AddOrder';
 import { DocumentManagement } from './pages/DocumentManagement';
-import { AttendanceDashboard } from './pages/attendance/AttendanceDashboard';
+import { AttendanceOverview } from './pages/attendance/AttendanceOverview';
 import { AttendanceRoster } from './pages/attendance/AttendanceRoster';
 import { AttendanceEmployees } from './pages/attendance/AttendanceEmployees';
 import { AttendanceEmployeeForm } from './pages/attendance/AttendanceEmployeeForm';
 import { AttendanceEmployeeDetail } from './pages/attendance/AttendanceEmployeeDetail';
-import { AttendanceRecords } from './pages/attendance/AttendanceRecords';
-import { AttendanceReports } from './pages/attendance/AttendanceReports';
-import { AttendancePayroll } from './pages/attendance/AttendancePayroll';
-import { AttendanceLeaves } from './pages/attendance/AttendanceLeaves';
-import { AttendanceHolidays } from './pages/attendance/AttendanceHolidays';
+import { AttendanceTimeOff } from './pages/attendance/AttendanceTimeOff';
+import { AttendancePayrollHub } from './pages/attendance/AttendancePayrollHub';
 import { AttendanceSettings } from './pages/attendance/AttendanceSettings';
+import { AttendanceSelfPunch } from './pages/attendance/AttendanceSelfPunch';
 import { AttendancePunch } from './pages/attendance/AttendancePunch';
 
 const queryClient = new QueryClient({
@@ -68,6 +68,8 @@ function App() {
             <Route path="roles" element={<RoleManagement />} />
             <Route path="complaints" element={<ComplaintManagement />} />
             <Route path="tenders" element={<TenderManagement />} />
+            <Route path="tradeindia-inquiries" element={<TradeIndiaInquiries />} />
+            <Route path="indiamart-leads" element={<IndiaMartLeads />} />
             <Route path="leads" element={<LeadManagement />} />
             <Route path="invoices" element={<TaxInvoiceManagement />} />
             <Route path="expenses" element={<ExpenseManagement />} />
@@ -80,18 +82,20 @@ function App() {
             <Route path="orders" element={<OrderProcessing />} />
             <Route path="orders/new" element={<AddOrder />} />
             <Route path="documents" element={<DocumentManagement />} />
-            <Route path="attendance" element={<AttendanceDashboard />} />
+            <Route path="attendance" element={<AttendanceOverview />} />
+            <Route path="attendance/records" element={<AttendanceOverview />} />
             <Route path="attendance/roster" element={<AttendanceRoster />} />
             <Route path="attendance/employees" element={<AttendanceEmployees />} />
             <Route path="attendance/employees/new" element={<AttendanceEmployeeForm />} />
             <Route path="attendance/employees/:id/edit" element={<AttendanceEmployeeForm />} />
             <Route path="attendance/employees/:id" element={<AttendanceEmployeeDetail />} />
-            <Route path="attendance/records" element={<AttendanceRecords />} />
-            <Route path="attendance/leaves" element={<AttendanceLeaves />} />
-            <Route path="attendance/holidays" element={<AttendanceHolidays />} />
-            <Route path="attendance/reports" element={<AttendanceReports />} />
-            <Route path="attendance/payroll" element={<AttendancePayroll />} />
+            <Route path="attendance/time-off" element={<AttendanceTimeOff />} />
+            <Route path="attendance/leaves" element={<Navigate to="/dashboard/attendance/time-off?tab=leaves" replace />} />
+            <Route path="attendance/holidays" element={<Navigate to="/dashboard/attendance/time-off?tab=holidays" replace />} />
+            <Route path="attendance/payroll" element={<AttendancePayrollHub />} />
+            <Route path="attendance/reports" element={<Navigate to="/dashboard/attendance/payroll?tab=reports" replace />} />
             <Route path="attendance/settings" element={<AttendanceSettings />} />
+            <Route path="attendance/my-punch" element={<AttendanceSelfPunch />} />
             {/* Sales / Finance / Content – commented for now
             <Route path="sales" element={<PlaceholderModule title="Sales management" />} />
             <Route path="finance" element={<PlaceholderModule title="Finance management" />} />

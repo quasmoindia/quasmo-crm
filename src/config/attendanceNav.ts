@@ -1,26 +1,23 @@
 import type { IconType } from 'react-icons';
 import {
-  FiBarChart2,
   FiCalendar,
   FiDollarSign,
   FiGrid,
-  FiList,
-  FiSun,
   FiSettings,
   FiUserCheck,
   FiUsers,
 } from 'react-icons/fi';
+import { canUseDefaultSelfPunch } from './attendanceAccess';
 
 /** Permission tier for each attendance sidebar tab */
 export type AttendanceNavPermission =
   | 'core'
   | 'roster'
   | 'sitesShifts'
-  | 'reports'
-  | 'payroll'
-  | 'leaves'
-  | 'holidays'
-  | 'settings';
+  | 'timeOff'
+  | 'payrollHub'
+  | 'settings'
+  | 'selfPunch';
 
 export interface AttendanceNavItem {
   path: string;
@@ -28,19 +25,34 @@ export interface AttendanceNavItem {
   end: boolean;
   icon: IconType;
   permission: AttendanceNavPermission;
+  /** Extra paths that should highlight this sidebar item (for merged sections). */
+  activePaths?: string[];
 }
 
 export const ATTENDANCE_NAV_ITEMS: AttendanceNavItem[] = [
-  { path: '/dashboard/attendance', label: 'Dashboard', end: true, icon: FiGrid, permission: 'core' },
+  {
+    path: '/dashboard/attendance',
+    label: 'Overview',
+    end: true,
+    icon: FiGrid,
+    permission: 'core',
+    activePaths: ['/dashboard/attendance', '/dashboard/attendance/records'],
+  },
   { path: '/dashboard/attendance/roster', label: 'Quick punch', end: false, icon: FiUserCheck, permission: 'roster' },
   { path: '/dashboard/attendance/employees', label: 'Employees', end: false, icon: FiUsers, permission: 'core' },
-  { path: '/dashboard/attendance/records', label: 'Punch log', end: false, icon: FiList, permission: 'core' },
-  { path: '/dashboard/attendance/leaves', label: 'Leaves', end: false, icon: FiCalendar, permission: 'leaves' },
-  { path: '/dashboard/attendance/holidays', label: 'Holidays', end: false, icon: FiSun, permission: 'holidays' },
-  { path: '/dashboard/attendance/reports', label: 'Reports', end: false, icon: FiBarChart2, permission: 'reports' },
-  { path: '/dashboard/attendance/payroll', label: 'Payroll', end: false, icon: FiDollarSign, permission: 'payroll' },
+  { path: '/dashboard/attendance/time-off', label: 'Time off', end: false, icon: FiCalendar, permission: 'timeOff', activePaths: ['/dashboard/attendance/time-off', '/dashboard/attendance/leaves', '/dashboard/attendance/holidays'] },
+  { path: '/dashboard/attendance/payroll', label: 'Payroll', end: false, icon: FiDollarSign, permission: 'payrollHub', activePaths: ['/dashboard/attendance/payroll', '/dashboard/attendance/reports'] },
   { path: '/dashboard/attendance/settings', label: 'Settings', end: false, icon: FiSettings, permission: 'settings' },
 ];
+
+/** Employee self-punch — shown for non-HR roles (any CRM role except admin / HR / manager). */
+export const ATTENDANCE_SELF_PUNCH_NAV: AttendanceNavItem = {
+  path: '/dashboard/attendance/my-punch',
+  label: 'Punch',
+  end: true,
+  icon: FiUserCheck,
+  permission: 'selfPunch',
+};
 
 export type AttendanceNavAccess = {
   canViewCore: boolean;
@@ -72,7 +84,8 @@ export function getAttendanceNavAccess(role?: string): AttendanceNavAccess {
 
 export function canAccessAttendanceNavItem(
   permission: AttendanceNavPermission,
-  access: AttendanceNavAccess
+  access: AttendanceNavAccess,
+  role?: string
 ): boolean {
   switch (permission) {
     case 'core':
@@ -81,16 +94,14 @@ export function canAccessAttendanceNavItem(
       return access.canViewRoster;
     case 'sitesShifts':
       return access.canViewSitesShifts;
-    case 'reports':
-      return access.canViewReports;
-    case 'payroll':
-      return access.canViewPayroll;
-    case 'leaves':
-      return access.canViewLeaves;
-    case 'holidays':
-      return access.canViewHolidays;
+    case 'timeOff':
+      return access.canViewLeaves || access.canViewHolidays;
+    case 'payrollHub':
+      return access.canViewPayroll || access.canViewReports;
     case 'settings':
       return access.canViewSettings;
+    case 'selfPunch':
+      return canUseDefaultSelfPunch(role);
     default:
       return false;
   }
@@ -98,25 +109,32 @@ export function canAccessAttendanceNavItem(
 
 export function getVisibleAttendanceNavItems(role?: string): AttendanceNavItem[] {
   const access = getAttendanceNavAccess(role);
-  return ATTENDANCE_NAV_ITEMS.filter((item) => canAccessAttendanceNavItem(item.permission, access));
+  const items = ATTENDANCE_NAV_ITEMS.filter((item) => canAccessAttendanceNavItem(item.permission, access, role));
+  if (canUseDefaultSelfPunch(role)) {
+    items.unshift(ATTENDANCE_SELF_PUNCH_NAV);
+  }
+  return items;
 }
 
 /** Resolve required permission for a pathname under /dashboard/attendance */
 export function getAttendancePermissionForPath(pathname: string): AttendanceNavPermission {
+  if (pathname.includes('/my-punch')) return 'selfPunch';
   if (pathname.includes('/roster')) return 'roster';
   if (pathname.includes('/sites')) return 'sitesShifts';
   if (pathname.includes('/shifts')) return 'sitesShifts';
   if (pathname.includes('/settings')) return 'settings';
-  if (pathname.includes('/payroll')) return 'payroll';
-  if (pathname.includes('/leaves')) return 'leaves';
-  if (pathname.includes('/holidays')) return 'holidays';
-  if (pathname.includes('/reports')) return 'reports';
+  if (pathname.includes('/time-off') || pathname.includes('/leaves') || pathname.includes('/holidays')) {
+    return 'timeOff';
+  }
+  if (pathname.includes('/payroll') || pathname.includes('/reports')) return 'payrollHub';
+  if (pathname.includes('/records')) return 'core';
   return 'core';
 }
 
 export function canAccessAttendancePath(pathname: string, role?: string): boolean {
   if (!pathname.startsWith('/dashboard/attendance')) return true;
-  const access = getAttendanceNavAccess(role);
   const permission = getAttendancePermissionForPath(pathname);
-  return canAccessAttendanceNavItem(permission, access);
+  if (permission === 'selfPunch') return canUseDefaultSelfPunch(role);
+  const access = getAttendanceNavAccess(role);
+  return canAccessAttendanceNavItem(permission, access, role);
 }

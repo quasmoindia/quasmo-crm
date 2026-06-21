@@ -1,12 +1,48 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiPlus, FiUpload } from 'react-icons/fi';
+import { FiPlus, FiUpload, FiUsers, FiUserCheck } from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { DataTable } from '../../components/DataTable';
 import { useDeleteEmployee, useEmployeesList, useImportEmployees } from '../../api/attendance';
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
 import type { Employee } from '../../types/attendance';
+
+function EmployeeAvatar({ employee }: { employee: Employee }) {
+  if (employee.referencePhotoUrl) {
+    return (
+      <img
+        src={employee.referencePhotoUrl}
+        alt={employee.fullName}
+        className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-white"
+      />
+    );
+  }
+  const initials = employee.fullName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
+  return (
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-50 text-xs font-bold text-teal-700 ring-2 ring-white">
+      {initials || 'E'}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: Employee['status'] }) {
+  const active = status === 'active';
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+        active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+      }`}
+    >
+      {active ? 'Active' : 'Inactive'}
+    </span>
+  );
+}
 
 export function AttendanceEmployees() {
   const navigate = useNavigate();
@@ -19,6 +55,12 @@ export function AttendanceEmployees() {
   const importMutation = useImportEmployees();
   const deleteEmployee = useDeleteEmployee();
 
+  const rows = data?.data ?? [];
+  const linkedCount = useMemo(
+    () => rows.filter((employee) => employee.userId && typeof employee.userId === 'object').length,
+    [rows]
+  );
+
   const handleCsvImport = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -29,7 +71,7 @@ export function AttendanceEmployees() {
       const text = await file.text();
       const lines = text.split(/\r?\n/).filter(Boolean);
       const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-      const rows = lines.slice(1).map((line) => {
+      const parsedRows = lines.slice(1).map((line) => {
         const cols = line.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
         const row: Record<string, string> = {};
         headers.forEach((h, i) => {
@@ -37,7 +79,7 @@ export function AttendanceEmployees() {
         });
         return row;
       });
-      await importMutation.mutateAsync(rows);
+      await importMutation.mutateAsync(parsedRows);
     };
     input.click();
   };
@@ -45,7 +87,10 @@ export function AttendanceEmployees() {
   return (
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Employees</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Employees</h1>
+          <p className="mt-1 text-sm text-slate-500">Manage your team, link app users, and keep reference photos up to date.</p>
+        </div>
         {canManageEmployees && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleCsvImport} loading={importMutation.isPending}>
@@ -57,54 +102,114 @@ export function AttendanceEmployees() {
           </div>
         )}
       </div>
+
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card className="flex items-center gap-4">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
+            <FiUsers className="size-5" />
+          </div>
+          <div>
+            <p className="text-sm text-slate-500">Total employees</p>
+            <p className="text-2xl font-bold text-slate-800">{data?.pagination?.total ?? rows.length}</p>
+          </div>
+        </Card>
+        <Card className="flex items-center gap-4">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700">
+            <FiUserCheck className="size-5" />
+          </div>
+          <div>
+            <p className="text-sm text-slate-500">App linked (this page)</p>
+            <p className="text-2xl font-bold text-slate-800">{linkedCount}</p>
+          </div>
+        </Card>
+      </div>
+
       <Card>
         <DataTable<Employee>
           columns={[
-            { key: 'code', label: 'Code', render: (e) => <span className="font-medium">{e.employeeCode}</span> },
-            { key: 'name', label: 'Name', render: (e) => e.fullName },
-            { key: 'phone', label: 'Phone', render: (e) => e.phone ?? '—' },
-            { key: 'dept', label: 'Department', render: (e) => e.department ?? '—' },
-            { key: 'status', label: 'Status', render: (e) => e.status },
+            {
+              key: 'name',
+              label: 'Employee',
+              render: (employee) => (
+                <div className="flex items-center gap-3">
+                  <EmployeeAvatar employee={employee} />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-slate-800">{employee.fullName}</p>
+                    <p className="truncate text-xs text-slate-500">{employee.employeeCode}</p>
+                  </div>
+                </div>
+              ),
+            },
+            { key: 'phone', label: 'Phone', render: (employee) => employee.phone ?? '—' },
+            { key: 'dept', label: 'Department', render: (employee) => employee.department ?? '—' },
+            {
+              key: 'app',
+              label: 'App login',
+              render: (employee) =>
+                employee.userId && typeof employee.userId === 'object' ? (
+                  <span className="text-sm text-teal-700">{employee.userId.fullName}</span>
+                ) : (
+                  <span className="text-sm text-slate-400">Not linked</span>
+                ),
+            },
+            { key: 'status', label: 'Status', render: (employee) => <StatusBadge status={employee.status} /> },
           ]}
-          data={data?.data ?? []}
-          rowKey={(e) => e._id}
+          data={rows}
+          rowKey={(employee) => employee._id}
           search={{
             value: searchInput,
             onChange: setSearchInput,
-            placeholder: 'Search employees...',
-            onSearchSubmit: () => { setSearchQuery(searchInput); setPage(1); },
+            placeholder: 'Search by name, code, department...',
+            onSearchSubmit: () => {
+              setSearchQuery(searchInput);
+              setPage(1);
+            },
           }}
-          pagination={data?.pagination ? {
-            page: data.pagination.page,
-            totalPages: data.pagination.pages,
-            total: data.pagination.total,
-            limit: data.pagination.limit,
-            onPageChange: setPage,
-          } : undefined}
+          pagination={
+            data?.pagination
+              ? {
+                  page: data.pagination.page,
+                  totalPages: data.pagination.pages,
+                  total: data.pagination.total,
+                  limit: data.pagination.limit,
+                  onPageChange: setPage,
+                }
+              : undefined
+          }
           isLoading={isLoading}
           emptyMessage="No employees found."
-          renderActions={(e) => (
+          renderActions={(employee) => (
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
-                className="text-sm text-[#305dff] hover:underline"
-                onClick={() => navigate(`/dashboard/attendance/employees/${e._id}`)}
+                className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-[#305dff] hover:bg-indigo-50"
+                onClick={() => navigate(`/dashboard/attendance/employees/${employee._id}`)}
               >
                 View
               </button>
-              {isAdmin && (
+              {canManageEmployees ? (
                 <button
                   type="button"
-                  className="text-sm text-red-600 hover:underline"
-                  onClick={() => setDeleteTarget(e)}
+                  className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  onClick={() => navigate(`/dashboard/attendance/employees/${employee._id}/edit`)}
+                >
+                  Edit
+                </button>
+              ) : null}
+              {isAdmin ? (
+                <button
+                  type="button"
+                  className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                  onClick={() => setDeleteTarget(employee)}
                 >
                   Delete
                 </button>
-              )}
+              ) : null}
             </div>
           )}
         />
       </Card>
+
       {importMutation.data?.errors?.length ? (
         <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
           Imported {importMutation.data.created}. Errors: {importMutation.data.errors.join('; ')}

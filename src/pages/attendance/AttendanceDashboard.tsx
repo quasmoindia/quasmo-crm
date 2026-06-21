@@ -12,13 +12,13 @@ function empName(r: AttendanceRecord) {
   return '—';
 }
 
-export function AttendanceDashboard() {
+export function AttendanceDashboard({ embedded = false }: { embedded?: boolean }) {
   const { data, isLoading } = useAttendanceDashboard();
   const stats = data?.stats;
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-slate-800">Attendance — Today</h1>
+      {!embedded ? <h1 className="mb-6 text-2xl font-bold text-slate-800">Attendance — Today</h1> : null}
       {data?.workDate && (
         <p className="mb-4 text-sm text-slate-500">Work date: {data.workDate}</p>
       )}
@@ -50,7 +50,7 @@ export function AttendanceDashboard() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-semibold text-slate-800">Today&apos;s punch log</h2>
           <Link to="/dashboard/attendance/records" className="text-sm text-[#305dff] hover:underline">
-            View all records
+            View full punch log
           </Link>
         </div>
         <DataTable<AttendanceRecord>
