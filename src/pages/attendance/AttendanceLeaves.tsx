@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FiCalendar, FiPlus, FiSun } from 'react-icons/fi';
+import { FiCalendar, FiPlus } from 'react-icons/fi';
 import { Card } from '../../components/Card';
 import { DataTable } from '../../components/DataTable';
 import { Input } from '../../components/Input';

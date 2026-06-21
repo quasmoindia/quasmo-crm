@@ -129,7 +129,7 @@ export function DashboardLayout() {
       </div>
       <nav className="flex flex-1 flex-col gap-5 overflow-y-auto p-3.5">
         {NAV_SECTIONS.map((section) => {
-          const isAttendanceSection = section.moduleIds.includes('attendance');
+          const isAttendanceSection = (section.moduleIds as readonly string[]).includes('attendance');
           const sectionTitle = isAttendanceSection ? attendanceSectionTitle : section.title;
 
           const sectionItems = section.moduleIds
