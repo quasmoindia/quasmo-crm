@@ -18,6 +18,16 @@ import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
 import { TableRowActions } from '../components/TableRowActions';
 import {
+  LeadContactCell,
+  LeadDetailContactGrid,
+  LeadDetailHeader,
+  LeadInterestCell,
+  LeadKanbanMeta,
+  LeadOriginPanel,
+  LeadSourceCell,
+  LeadSourceSummaryBar,
+} from '../components/leads/LeadDisplayParts';
+import {
   useLeadsList,
   useLeadsKanbanList,
   useLead,
@@ -311,25 +321,26 @@ function LeadKanbanCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow ${isDragging ? 'z-50 opacity-90 shadow-lg' : ''}`}
+      className={`rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-sm transition-all hover:border-indigo-200/80 hover:shadow-md ${isDragging ? 'z-50 opacity-90 shadow-lg ring-2 ring-indigo-300' : ''}`}
     >
+      <LeadKanbanMeta lead={lead} />
       <div className="flex items-start justify-between gap-2">
         <div
           className="min-w-0 flex-1 cursor-grab active:cursor-grabbing"
           {...listeners}
           {...attributes}
         >
-          <p className="truncate font-medium text-slate-800">{lead.name}</p>
+          <p className="truncate text-sm font-semibold text-slate-900">{lead.name}</p>
           <p className="mt-0.5 text-xs text-slate-500">{lead.phone}</p>
-          {lead.company && <p className="mt-0.5 line-clamp-1 text-xs text-slate-600">{lead.company}</p>}
-          {lead.address && <p className="line-clamp-2 text-[11px] text-slate-500">{lead.address}</p>}
-          {lead.gstNumber && <p className="font-mono text-[11px] text-slate-400">GST {lead.gstNumber}</p>}
-          <div className="mt-2 flex flex-wrap gap-1">
-            <span className="text-xs text-slate-400">{assignedToName(lead)}</span>
-          </div>
+          {lead.company && !lead.inquiryMeta?.product ? (
+            <p className="mt-1 line-clamp-1 text-xs text-slate-600">{lead.company}</p>
+          ) : null}
         </div>
       </div>
-      <p className="mt-2 text-xs text-slate-400">{formatDate(lead.createdAt)}</p>
+      <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px] text-slate-400">
+        <span className="truncate">{assignedToName(lead)}</span>
+        <span className="shrink-0 tabular-nums">{formatDate(lead.createdAt)}</span>
+      </div>
       <div className="mt-2 flex gap-2 border-t border-slate-100 pt-2">
         <button
           type="button"
@@ -395,7 +406,7 @@ function LeadKanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`min-h-[200px] min-w-[200px] max-w-[280px] shrink-0 rounded-lg border-2 p-3 transition-colors ${colors} ${isOver ? 'ring-2 ring-indigo-400 ring-offset-2' : ''}`}
+      className={`min-h-[200px] min-w-[220px] max-w-[300px] shrink-0 rounded-xl border-2 p-3 transition-colors ${colors} ${isOver ? 'ring-2 ring-indigo-400 ring-offset-2' : ''}`}
     >
       <h3 className="mb-3 flex items-center justify-between text-sm font-semibold text-slate-700">
         {label}
@@ -597,13 +608,20 @@ export function LeadManagement() {
   );
 
   const columns = [
-    { key: 'name', label: 'Name', render: (l: Lead) => <span className="font-medium text-slate-800">{l.name}</span> },
-    { key: 'phone', label: 'Phone', render: (l: Lead) => l.phone },
-    { key: 'email', label: 'Email', render: (l: Lead) => l.email || '—' },
     {
-      key: 'business',
-      label: 'Business',
-      render: (l: Lead) => <LeadBusinessCell lead={l} />,
+      key: 'contact',
+      label: 'Contact',
+      render: (l: Lead) => <LeadContactCell lead={l} />,
+    },
+    {
+      key: 'interest',
+      label: 'Interest',
+      render: (l: Lead) => <LeadInterestCell lead={l} />,
+    },
+    {
+      key: 'source',
+      label: 'Source',
+      render: (l: Lead) => <LeadSourceCell lead={l} />,
     },
     { key: 'status', label: 'Status', render: (l: Lead) => <LeadStatusBadge status={l.status} /> },
     { key: 'assignedTo', label: 'Assigned to', render: (l: Lead) => assignedToName(l) },
@@ -727,6 +745,7 @@ export function LeadManagement() {
                   : null}
               </p>
             ) : null}
+            <LeadSourceSummaryBar leads={leads} />
             <LeadKanbanBoard
               leads={leads}
               isLoading={isLoading}
@@ -1733,18 +1752,21 @@ function LeadDetailModal({
               </div>
             ) : (
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
-                <div><p className="text-sm text-slate-500">Name</p><p className="text-slate-800">{lead.name}</p></div>
-                <div><p className="text-sm text-slate-500">Phone</p><p className="text-slate-800">{lead.phone}</p></div>
-                <div><p className="text-sm text-slate-500">Email</p><p className="text-slate-800">{lead.email || '—'}</p></div>
-                <div>
-                  <p className="text-sm text-slate-500">Business</p>
-                  <div className="mt-1 rounded-lg border border-slate-100 bg-slate-50/80 p-3">
+                <LeadDetailHeader lead={lead} />
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <LeadStatusBadge status={lead.status} />
+                  <span className="text-xs text-slate-500">Created {formatDate(lead.createdAt)}</span>
+                </div>
+                <LeadDetailContactGrid lead={lead} />
+                <div className="mb-5">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Business</p>
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
                     <LeadBusinessCell lead={lead} />
                   </div>
                 </div>
-                <div><p className="text-sm text-slate-500">Status</p><p className="text-slate-800"><LeadStatusBadge status={lead.status} /></p></div>
-                <div><p className="text-sm text-slate-500">Assigned to</p><p className="text-slate-800">{assignedToName(lead)}</p></div>
-                <div><p className="text-sm text-slate-500">Created</p><p className="text-slate-800">{formatDate(lead.createdAt)}</p></div>
+                <div className="mb-5">
+                  <LeadOriginPanel lead={lead} />
+                </div>
                 {attachments.length > 0 && (
                   <div>
                     <p className="text-sm text-slate-500">Attachments</p>
@@ -1776,7 +1798,14 @@ function LeadDetailModal({
                     </div>
                   </div>
                 )}
-                {lead.notes && <div><p className="text-sm text-slate-500">Notes</p><p className="whitespace-pre-wrap text-slate-800">{lead.notes}</p></div>}
+                {lead.notes && (
+                  <div className="mb-5">
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Notes</p>
+                    <p className="whitespace-pre-wrap rounded-xl border border-slate-100 bg-slate-50/50 p-3 text-sm leading-relaxed text-slate-800">
+                      {lead.notes}
+                    </p>
+                  </div>
+                )}
                 <LeadLinkedInvoicesSection leadId={id} />
                 <div className="flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-4">
                   <div className="flex flex-wrap gap-2">
