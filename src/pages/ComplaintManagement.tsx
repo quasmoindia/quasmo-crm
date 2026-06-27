@@ -127,7 +127,10 @@ function userPhone(complaint: Complaint): string | null {
 function getMessageTarget(complaint: Complaint): { name: string; phone: string } | null {
   const phone = complaint.phone?.trim() || (typeof complaint.user === 'object' && complaint.user?.phone?.trim());
   if (!phone) return null;
-  const name = typeof complaint.user === 'object' ? (complaint.user.fullName ?? 'Contact') : 'Contact';
+  const name =
+    typeof complaint.user === 'object' && complaint.user?.fullName
+      ? complaint.user.fullName
+      : 'Contact';
   return { name, phone };
 }
 

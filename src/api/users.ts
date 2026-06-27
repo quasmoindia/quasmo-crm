@@ -18,6 +18,10 @@ export function updateUserApi(id: string, payload: UpdateUserPayload) {
   return patch<UserRecord>(`${USERS_BASE}/${id}`, payload);
 }
 
+export function resetUserPasswordApi(id: string, password: string) {
+  return patch<{ message: string }>(`${USERS_BASE}/${id}/password`, { password });
+}
+
 export function deleteUserApi(id: string) {
   return del<void>(`${USERS_BASE}/${id}`);
 }
@@ -45,6 +49,17 @@ export function useUpdateUser() {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateUserPayload }) =>
       updateUserApi(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: usersQueryKey });
+    },
+  });
+}
+
+export function useResetUserPassword() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) =>
+      resetUserPasswordApi(id, password),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: usersQueryKey });
     },

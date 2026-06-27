@@ -19,6 +19,7 @@ import { DataTable } from '../components/DataTable';
 import { TableRowActions } from '../components/TableRowActions';
 import {
   useLeadsList,
+  useLeadsKanbanList,
   useLead,
   useCreateLead,
   useUpdateLead,
@@ -41,7 +42,8 @@ import { LEAD_STATUS_OPTIONS, LEAD_SOURCE_OPTIONS, LEAD_STATUS_STYLES } from '..
 import type { TaxInvoice } from '../types/taxInvoice';
 import { DOCUMENT_KIND_OPTIONS } from '../types/taxDocumentKind';
 
-const KANBAN_LIMIT = 500;
+const KANBAN_PAGE_SIZE = 500;
+const KANBAN_MAX_LEADS = KANBAN_PAGE_SIZE * 20;
 
 function LeadStatusBadge({ status }: { status: LeadStatus }) {
   const label = LEAD_STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
@@ -535,13 +537,29 @@ export function LeadManagement() {
     }
   };
 
-  const { data, isLoading, isError, error } = useLeadsList({
-    status: isKanban ? undefined : (statusFilter || undefined),
-    assignedTo: assignedFilter || undefined,
-    search: searchQuery || undefined,
-    page: isKanban ? 1 : page,
-    limit: isKanban ? KANBAN_LIMIT : 10,
-  });
+  const listQuery = useLeadsList(
+    {
+      status: statusFilter || undefined,
+      assignedTo: assignedFilter || undefined,
+      search: searchQuery || undefined,
+      page,
+      limit: 10,
+    },
+    { enabled: !isKanban }
+  );
+
+  const kanbanQuery = useLeadsKanbanList(
+    {
+      assignedTo: assignedFilter || undefined,
+      search: searchQuery || undefined,
+    },
+    { enabled: isKanban }
+  );
+
+  const data = isKanban ? kanbanQuery.data : listQuery.data;
+  const isLoading = isKanban ? kanbanQuery.isLoading : listQuery.isLoading;
+  const isError = isKanban ? kanbanQuery.isError : listQuery.isError;
+  const error = isKanban ? kanbanQuery.error : listQuery.error;
 
   const createMutation = useCreateLead();
   const updateMutation = useUpdateLead();
@@ -549,6 +567,8 @@ export function LeadManagement() {
 
   const leads = data?.data ?? [];
   const pagination = data?.pagination;
+  const kanbanTotal = pagination?.total ?? leads.length;
+  const kanbanTruncated = isKanban && kanbanTotal > KANBAN_MAX_LEADS;
 
   const filters = (
     <div className="flex flex-wrap items-end gap-3">
@@ -699,6 +719,14 @@ export function LeadManagement() {
                 Apply search
               </Button>
             </div>
+            {kanbanTotal > 0 ? (
+              <p className="mb-3 text-sm text-slate-600">
+                Showing {leads.length} of {kanbanTotal} leads across all statuses.
+                {kanbanTruncated
+                  ? ` Kanban loads up to ${KANBAN_MAX_LEADS.toLocaleString()} leads — use search to narrow results.`
+                  : null}
+              </p>
+            ) : null}
             <LeadKanbanBoard
               leads={leads}
               isLoading={isLoading}

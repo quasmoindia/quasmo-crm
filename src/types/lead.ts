@@ -6,7 +6,13 @@ export type LeadStatus =
   | 'closed'
   | 'lost';
 
-export type LeadSource = 'website' | 'referral' | 'cold_call' | 'campaign' | 'other';
+export type LeadSource =
+  | 'website'
+  | 'referral'
+  | 'cold_call'
+  | 'campaign'
+  | 'indiamart'
+  | 'other';
 
 export type LeadDocumentSentType = 'quotation' | 'invoice' | 'proforma' | 'other';
 
@@ -40,6 +46,19 @@ export interface Lead {
   status: LeadStatus;
   source?: LeadSource;
   notes?: string;
+  externalSource?: 'indiamart';
+  externalId?: string;
+  inquiryMeta?: {
+    queryType?: string;
+    queryTime?: string;
+    subject?: string;
+    product?: string;
+    mcat?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    catalog?: string;
+  };
   documentsSent?: LeadDocumentSent[];
   /** Uploaded file URLs (PDF, images, Office, etc.) */
   attachments?: string[];
@@ -122,5 +141,6 @@ export const LEAD_SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
   { value: 'referral', label: 'Referral' },
   { value: 'cold_call', label: 'Cold call' },
   { value: 'campaign', label: 'Campaign' },
+  { value: 'indiamart', label: 'IndiaMART' },
   { value: 'other', label: 'Other' },
 ];

@@ -3,7 +3,7 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
-import { useUsersList, useCreateUser, useUpdateUser, useDeleteUser } from '../api/users';
+import { useUsersList, useCreateUser, useUpdateUser, useDeleteUser, useResetUserPassword } from '../api/users';
 import { useHexaUsersList, useCreateHexaUser, useUpdateHexaUser, useDeleteHexaUser } from '../api/hexaUsers';
 import { useRolesConfig } from '../api/config';
 import { useCurrentUser } from '../api/auth';
@@ -61,6 +61,7 @@ export function UserManagement() {
   const [createOpen, setCreateOpen] = useState(false);
   const [hexaCreateOpen, setHexaCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
+  const [resetPasswordUser, setResetPasswordUser] = useState<UserRecord | null>(null);
   const [editingHexaUser, setEditingHexaUser] = useState<HexaUserRecord | null>(null);
   const { data: authData } = useCurrentUser();
   const isAdmin = authData?.user?.role === 'admin';
@@ -78,6 +79,7 @@ export function UserManagement() {
   const updateHexaMutation = useUpdateHexaUser();
   const deleteHexaMutation = useDeleteHexaUser();
   const updateMutation = useUpdateUser();
+  const resetPasswordMutation = useResetUserPassword();
   const deleteMutation = useDeleteUser();
 
   const users = data?.data ?? [];
@@ -97,6 +99,11 @@ export function UserManagement() {
           <Button variant="outline" onClick={() => setEditingUser(u)}>
             Edit
           </Button>
+          {isAdmin && (
+            <Button variant="outline" onClick={() => setResetPasswordUser(u)}>
+              Reset password
+            </Button>
+          )}
           {isAdmin && u._id !== currentUserId && (
             <Button
               variant="outline"
@@ -246,6 +253,7 @@ export function UserManagement() {
       {editingHexaUser && (
         <EditHexaUserModal
           user={editingHexaUser}
+          isAdmin={isAdmin}
           onClose={() => setEditingHexaUser(null)}
           onSuccess={() => setEditingHexaUser(null)}
           mutation={updateHexaMutation}
@@ -258,6 +266,15 @@ export function UserManagement() {
           onClose={() => setEditingUser(null)}
           onSuccess={() => setEditingUser(null)}
           mutation={updateMutation}
+        />
+      )}
+
+      {resetPasswordUser && (
+        <ResetPasswordModal
+          user={resetPasswordUser}
+          onClose={() => setResetPasswordUser(null)}
+          onSuccess={() => setResetPasswordUser(null)}
+          mutation={resetPasswordMutation}
         />
       )}
     </div>
@@ -384,11 +401,13 @@ function EditHexaUserModal({
   onClose,
   onSuccess,
   mutation,
+  isAdmin,
 }: {
   user: HexaUserRecord;
   onClose: () => void;
   onSuccess: () => void;
   mutation: ReturnType<typeof useUpdateHexaUser>;
+  isAdmin: boolean;
 }) {
   const [fullName, setFullName] = useState(user.fullName);
   const [email, setEmail] = useState(user.email);
@@ -472,16 +491,18 @@ function EditHexaUserModal({
             disabled={mutation.isPending}
             required
           />
-          <Input
-            label="New password (optional)"
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Leave blank to keep current password"
-            disabled={mutation.isPending}
-            showPasswordToggle
-          />
+          {isAdmin ? (
+            <Input
+              label="New password (optional)"
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Leave blank to keep current password"
+              disabled={mutation.isPending}
+              showPasswordToggle
+            />
+          ) : null}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
@@ -776,6 +797,114 @@ function EditUserModal({
             </Button>
             <Button type="submit" loading={mutation.isPending}>
               Save
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ResetPasswordModal({
+  user,
+  onClose,
+  onSuccess,
+  mutation,
+}: {
+  user: UserRecord;
+  onClose: () => void;
+  onSuccess: () => void;
+  mutation: ReturnType<typeof useResetUserPassword>;
+}) {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!password) {
+      setError('Password is required');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    mutation.mutate(
+      { id: user._id, password },
+      { onSuccess, onError: (err: Error) => setError(err.message) }
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="reset-password-title"
+    >
+      <div
+        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 id="reset-password-title" className="text-lg font-semibold text-slate-800">
+            Reset password
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close"
+          >
+            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <p className="mb-4 text-sm text-slate-600">
+          Set a new password for <span className="font-medium text-slate-800">{user.fullName}</span> ({user.email}).
+        </p>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {error && (
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">
+              {error}
+            </div>
+          )}
+          <Input
+            label="New password"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="At least 6 characters"
+            disabled={mutation.isPending}
+            showPasswordToggle
+            required
+          />
+          <Input
+            label="Confirm password"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Re-enter password"
+            disabled={mutation.isPending}
+            showPasswordToggle
+            required
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={mutation.isPending}>
+              Update password
             </Button>
           </div>
         </form>

@@ -50,3 +50,47 @@ export const QUERY_TYPE_LABELS: Record<string, string> = {
   BIZ: 'Catalog view',
   WA: 'WhatsApp',
 };
+
+export type IndiaMartDuplicateStatus = 'new' | 'imported' | 'phone_duplicate';
+
+export interface IndiaMartDuplicateInfo {
+  rowKey: string;
+  status: IndiaMartDuplicateStatus;
+  leadId?: string;
+  leadName?: string;
+  matchedBy?: 'externalId' | 'phone';
+}
+
+export interface IndiaMartImportDetail {
+  rowKey: string;
+  status: 'created' | 'skipped' | 'failed';
+  reason?: string;
+  leadId?: string;
+  leadName?: string;
+}
+
+export interface IndiaMartImportResult {
+  created: number;
+  skipped: number;
+  failed: number;
+  details: IndiaMartImportDetail[];
+}
+
+export interface IndiaMartCheckDuplicatesResult {
+  duplicates: Record<string, IndiaMartDuplicateInfo>;
+}
+
+function str(value: unknown): string {
+  if (value == null || value === '' || value === '<nil>') return '';
+  return String(value).trim();
+}
+
+export function indiaMartRowKey(row: IndiaMartLead): string {
+  const id = str(row.UNIQUE_QUERY_ID);
+  if (id) return id;
+  return [str(row.SENDER_MOBILE), str(row.QUERY_TIME), str(row.QUERY_PRODUCT_NAME)].join('|');
+}
+
+export function isIndiaMartImportable(status: IndiaMartDuplicateStatus | undefined): boolean {
+  return status === 'new' || status === undefined;
+}
