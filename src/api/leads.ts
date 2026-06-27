@@ -33,8 +33,48 @@ export function leadsListKey(params: {
   search?: string;
   page?: number;
   limit?: number;
+  kanban?: boolean;
 }) {
-  return [...leadsQueryKey, 'list', params] as const;
+  return [...leadsQueryKey, params.kanban ? 'kanban' : 'list', params] as const;
+}
+
+const KANBAN_PAGE_SIZE = 500;
+const KANBAN_MAX_PAGES = 20;
+
+/** Load all lead pages for kanban (backend caps each page at 500). */
+export async function listAllLeadsForKanbanApi(params: {
+  assignedTo?: string;
+  search?: string;
+}): Promise<LeadsListResponse> {
+  const first = await listLeadsApi({
+    ...params,
+    page: 1,
+    limit: KANBAN_PAGE_SIZE,
+  });
+
+  const pagesToLoad = Math.min(first.pagination.totalPages, KANBAN_MAX_PAGES);
+  if (pagesToLoad <= 1) return first;
+
+  const rest = await Promise.all(
+    Array.from({ length: pagesToLoad - 1 }, (_, index) =>
+      listLeadsApi({
+        ...params,
+        page: index + 2,
+        limit: KANBAN_PAGE_SIZE,
+      })
+    )
+  );
+
+  const data = [first.data, ...rest.map((page) => page.data)].flat();
+  return {
+    data,
+    pagination: {
+      page: 1,
+      limit: data.length,
+      total: first.pagination.total,
+      totalPages: 1,
+    },
+  };
 }
 
 export function listLeadsApi(params: {
@@ -176,6 +216,20 @@ export function useLeadsList(
   return useQuery({
     queryKey: leadsListKey(params),
     queryFn: () => listLeadsApi(params),
+    enabled: options?.enabled ?? true,
+  });
+}
+
+export function useLeadsKanbanList(
+  params: {
+    assignedTo?: string;
+    search?: string;
+  },
+  options?: { enabled?: boolean }
+) {
+  return useQuery({
+    queryKey: leadsListKey({ ...params, kanban: true }),
+    queryFn: () => listAllLeadsForKanbanApi(params),
     enabled: options?.enabled ?? true,
   });
 }

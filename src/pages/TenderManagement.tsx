@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { FiFileText, FiMapPin, FiPlus, FiSearch, FiX } from 'react-icons/fi';
+import { FiEdit2, FiEye, FiFileText, FiMapPin, FiPlus, FiSearch, FiTrash2, FiX } from 'react-icons/fi';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
+import { TableRowActions } from '../components/TableRowActions';
 import { useTendersList, useCreateTender, useUpdateTender, useDeleteTender } from '../api/tenders';
 import { useCurrentUser } from '../api/auth';
 import type { Tender, CreateTenderPayload } from '../types/tender';
@@ -24,6 +25,21 @@ function formatMoney(n: number) {
   }).format(n);
 }
 
+function createdByName(tender: Tender): string {
+  const creator = tender.createdBy;
+  if (typeof creator === 'object' && creator?.fullName) return creator.fullName;
+  return '—';
+}
+
+function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-medium text-slate-800">{value}</p>
+    </div>
+  );
+}
+
 export function TenderManagement() {
   const { data: authData } = useCurrentUser();
   const isAdmin = authData?.user?.role === 'admin';
@@ -34,6 +50,7 @@ export function TenderManagement() {
   const [departmentInput, setDepartmentInput] = useState('');
   const [departmentQuery, setDepartmentQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [viewTarget, setViewTarget] = useState<Tender | null>(null);
   const [editTarget, setEditTarget] = useState<Tender | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Tender | null>(null);
 
@@ -271,28 +288,35 @@ export function TenderManagement() {
               }
               isLoading={isLoading}
               emptyMessage="No tenders match your filters. Try clearing filters or broadening your search."
-              renderActions={
-                isAdmin
-                  ? (tender) => (
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-[#305dff]/30 hover:bg-[#305dff]/5 hover:text-[#305dff]"
-                          onClick={() => setEditTarget(tender)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100"
-                          onClick={() => setDeleteTarget(tender)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )
-                  : undefined
-              }
+              renderActions={(tender) => (
+                <TableRowActions
+                  items={[
+                    {
+                      key: 'view',
+                      label: 'View tender',
+                      icon: FiEye,
+                      variant: 'primary',
+                      onClick: () => setViewTarget(tender),
+                    },
+                    {
+                      key: 'edit',
+                      label: 'Edit tender',
+                      icon: FiEdit2,
+                      variant: 'default',
+                      hidden: !isAdmin,
+                      onClick: () => setEditTarget(tender),
+                    },
+                    {
+                      key: 'delete',
+                      label: 'Delete tender',
+                      icon: FiTrash2,
+                      variant: 'danger',
+                      hidden: !isAdmin,
+                      onClick: () => setDeleteTarget(tender),
+                    },
+                  ]}
+                />
+              )}
             />
           </div>
         )}
@@ -310,6 +334,23 @@ export function TenderManagement() {
           }}
         />
       )}
+
+      {viewTarget ? (
+        <TenderDetailModal
+          tender={viewTarget}
+          showPricing={isAdmin}
+          canEdit={isAdmin}
+          onClose={() => setViewTarget(null)}
+          onEdit={() => {
+            setEditTarget(viewTarget);
+            setViewTarget(null);
+          }}
+          onDelete={() => {
+            setDeleteTarget(viewTarget);
+            setViewTarget(null);
+          }}
+        />
+      ) : null}
 
       {editTarget && isAdmin ? (
         <TenderFormModal
@@ -375,6 +416,136 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
       {label}
       <FiX className="size-3" aria-hidden />
     </button>
+  );
+}
+
+function TenderDetailModal({
+  tender,
+  showPricing,
+  canEdit,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  tender: Tender;
+  showPricing: boolean;
+  canEdit: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-[2px]"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="tender-detail-title"
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h2 id="tender-detail-title" className="text-lg font-semibold text-slate-800">
+              Tender details
+            </h2>
+            <p className="mt-0.5 inline-flex items-center gap-1.5 text-sm text-[#305dff]">
+              <FiFileText className="size-4 shrink-0" aria-hidden />
+              {tender.tenderNo}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close"
+          >
+            <FiX className="size-5" />
+          </button>
+        </div>
+
+        <div className="space-y-5 px-6 py-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <DetailField
+              label="Location"
+              value={
+                tender.location ? (
+                  <span className="inline-flex items-center gap-1">
+                    <FiMapPin className="size-3.5 shrink-0 text-slate-400" aria-hidden />
+                    {tender.location}
+                  </span>
+                ) : (
+                  '—'
+                )
+              }
+            />
+            <DetailField
+              label="Department"
+              value={
+                tender.department ? (
+                  <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                    {tender.department}
+                  </span>
+                ) : (
+                  '—'
+                )
+              }
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <DetailField label="Model number" value={tender.modelNumber || '—'} />
+            <DetailField label="Item quoted" value={tender.itemQuoted || '—'} />
+          </div>
+
+          {showPricing ? (
+            <DetailField
+              label="Price quoted"
+              value={
+                tender.priceQuoted != null ? (
+                  <span className="font-mono text-emerald-700">{formatMoney(tender.priceQuoted)}</span>
+                ) : (
+                  '—'
+                )
+              }
+            />
+          ) : null}
+
+          <div className="grid gap-4 sm:grid-cols-2 border-t border-slate-100 pt-4">
+            <DetailField label="Added by" value={createdByName(tender)} />
+            <DetailField label="Added on" value={formatDate(tender.createdAt)} />
+            <DetailField label="Last updated" value={formatDate(tender.updatedAt)} />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap justify-between gap-2 border-t border-slate-100 px-6 py-4">
+          <div className="flex gap-2">
+            {canEdit ? (
+              <>
+                <Button type="button" variant="outline" onClick={onEdit}>
+                  <FiEdit2 className="size-4" aria-hidden />
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-rose-200 text-rose-700 hover:bg-rose-50"
+                  onClick={onDelete}
+                >
+                  <FiTrash2 className="size-4" aria-hidden />
+                  Delete
+                </Button>
+              </>
+            ) : null}
+          </div>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

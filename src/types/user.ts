@@ -36,3 +36,7 @@ export interface UpdateUserPayload {
   role?: string;
   phone?: string;
 }
+
+export interface ResetUserPasswordPayload {
+  password: string;
+}
