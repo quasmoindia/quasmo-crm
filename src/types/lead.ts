@@ -144,3 +144,24 @@ export const LEAD_SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
   { value: 'indiamart', label: 'IndiaMART' },
   { value: 'other', label: 'Other' },
 ];
+
+/** Tailwind classes for source badge (bg, text, ring) */
+export const LEAD_SOURCE_STYLES: Record<LeadSource, string> = {
+  website: 'bg-violet-50 text-violet-800 ring-violet-200/80',
+  referral: 'bg-teal-50 text-teal-800 ring-teal-200/80',
+  cold_call: 'bg-slate-100 text-slate-700 ring-slate-200/80',
+  campaign: 'bg-fuchsia-50 text-fuchsia-800 ring-fuchsia-200/80',
+  indiamart: 'bg-orange-50 text-orange-900 ring-orange-200/80',
+  other: 'bg-slate-100 text-slate-600 ring-slate-200/80',
+};
+
+export function getLeadSourceLabel(source: LeadSource | undefined): string {
+  if (!source) return 'Not set';
+  return LEAD_SOURCE_OPTIONS.find((o) => o.value === source)?.label ?? source;
+}
+
+export function resolveLeadSource(lead: Pick<Lead, 'source' | 'externalSource'>): LeadSource | undefined {
+  if (lead.source) return lead.source;
+  if (lead.externalSource === 'indiamart') return 'indiamart';
+  return undefined;
+}
