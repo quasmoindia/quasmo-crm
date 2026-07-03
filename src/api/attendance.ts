@@ -10,6 +10,9 @@ import type {
   AttendanceSettings,
   AttendanceSettingsWithSites,
   AttendancePunchContext,
+  KioskDevice,
+  KioskDeviceCreateResult,
+  KioskDirectory,
   PunchDirectory,
   CreateEmployeePayload,
   Employee,
@@ -31,6 +34,7 @@ import type {
 
 const BASE = '/attendance';
 const PUNCH_TOKEN_KEY = 'attendancePunchToken';
+const KIOSK_TOKEN_KEY = 'attendanceKioskToken';
 
 export function getPunchToken(): string | null {
   return localStorage.getItem(PUNCH_TOKEN_KEY);
@@ -42,6 +46,31 @@ export function setPunchToken(token: string) {
 
 export function clearPunchToken() {
   localStorage.removeItem(PUNCH_TOKEN_KEY);
+}
+
+export function getKioskDeviceToken(): string | null {
+  return localStorage.getItem(KIOSK_TOKEN_KEY);
+}
+
+export function setKioskDeviceToken(token: string) {
+  localStorage.setItem(KIOSK_TOKEN_KEY, token);
+}
+
+export function clearKioskDeviceToken() {
+  localStorage.removeItem(KIOSK_TOKEN_KEY);
+}
+
+/** Thrown by kiosk requests; carries the HTTP status so callers can detect a revoked (401) device. */
+export class KioskApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export function isKioskUnauthorizedError(err: unknown): boolean {
+  return err instanceof KioskApiError && err.status === 401;
 }
 
 async function punchFetch<T>(
@@ -78,6 +107,31 @@ async function crmMultipart<T>(path: string, form: FormData): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { message?: string }).message ?? 'Request failed');
+  return data as T;
+}
+
+/** Requests authenticated by the paired kiosk device's token (not a per-employee login). */
+async function kioskFetch<T>(
+  path: string,
+  options: { method?: string; body?: FormData | string } = {}
+): Promise<T> {
+  const token = getKioskDeviceToken();
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const url = `${base}/${BASE.replace(/^\//, '')}/kiosk/${path.replace(/^\//, '')}`;
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (options.body && !(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const res = await fetch(url, {
+    method: options.method ?? 'GET',
+    headers,
+    body: options.body,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new KioskApiError((data as { message?: string }).message ?? 'Request failed', res.status);
+  }
   return data as T;
 }
 
@@ -766,6 +820,103 @@ export async function punchOutApi(payload: {
 
 export async function myTodayApi() {
   return punchFetch<{ workDate: string; record: AttendanceRecord | null }>('punch/my-today');
+}
+
+// ─── Kiosk device punch (shared gate device, no per-employee login/OTP) ──────
+
+export function useKioskDirectory(enabled = true) {
+  return useQuery({
+    queryKey: ['attendance', 'kiosk-directory'],
+    queryFn: () => kioskFetch<KioskDirectory>('directory'),
+    enabled,
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export async function kioskPunchPreviewApi(payload: {
+  employeeId: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+}) {
+  return kioskFetch<GeofencePreview>('punch/preview', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function kioskPunchInApi(payload: {
+  employeeId: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  selfie: Blob;
+  clientTimestamp?: string;
+}) {
+  const form = buildPunchForm(payload);
+  return kioskFetch<{ record: AttendanceRecord; preview: GeofencePreview }>('punch/in', {
+    method: 'POST',
+    body: form,
+  });
+}
+
+export async function kioskPunchOutApi(payload: {
+  employeeId: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  selfie: Blob;
+  clientTimestamp?: string;
+}) {
+  const form = buildPunchForm(payload);
+  return kioskFetch<{ record: AttendanceRecord; preview: GeofencePreview }>('punch/out', {
+    method: 'POST',
+    body: form,
+  });
+}
+
+// ─── Kiosk device admin (HR-only management of gate devices) ─────────────────
+
+export function useKioskDevices() {
+  return useQuery({
+    queryKey: ['attendance', 'kiosk-devices'],
+    queryFn: () => get<{ data: KioskDevice[] }>(`${BASE}/kiosk-devices`),
+  });
+}
+
+export function useCreateKioskDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { name: string; workSiteId: string }) =>
+      post<KioskDeviceCreateResult>(`${BASE}/kiosk-devices`, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'kiosk-devices'] }),
+  });
+}
+
+export function useUpdateKioskDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { name?: string; workSiteId?: string } }) =>
+      patch<{ device: KioskDevice }>(`${BASE}/kiosk-devices/${id}`, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'kiosk-devices'] }),
+  });
+}
+
+export function useRevokeKioskDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => patch<{ device: KioskDevice }>(`${BASE}/kiosk-devices/${id}/revoke`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'kiosk-devices'] }),
+  });
+}
+
+export function useRegenerateKioskDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => post<KioskDeviceCreateResult>(`${BASE}/kiosk-devices/${id}/regenerate`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'kiosk-devices'] }),
+  });
 }
 
 export function exportReportUrl(params: { dateFrom?: string; dateTo?: string }) {

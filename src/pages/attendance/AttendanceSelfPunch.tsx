@@ -53,6 +53,19 @@ export function AttendanceSelfPunch() {
     onError: (e) => setError(e instanceof Error ? e.message : 'Punch failed'),
   });
 
+  const record = selfContext.data?.record;
+  const open = hasOpenSession(record);
+  const employee = selfContext.data?.employee;
+
+  const stats = useMemo(
+    () => [
+      { label: 'Worked today', value: formatMinutes(record?.workedMinutes) },
+      { label: 'Sessions', value: String(record?.sessions?.length ?? 0) },
+      { label: 'Current', value: open ? 'In' : 'Out' },
+    ],
+    [open, record?.sessions?.length, record?.workedMinutes]
+  );
+
   if (selfContext.isLoading) {
     return <p className="text-sm text-slate-500">Loading your punch profile…</p>;
   }
@@ -71,19 +84,6 @@ export function AttendanceSelfPunch() {
       </div>
     );
   }
-
-  const record = selfContext.data.record;
-  const open = hasOpenSession(record);
-  const employee = selfContext.data.employee;
-
-  const stats = useMemo(
-    () => [
-      { label: 'Worked today', value: formatMinutes(record?.workedMinutes) },
-      { label: 'Sessions', value: String(record?.sessions?.length ?? 0) },
-      { label: 'Current', value: open ? 'In' : 'Out' },
-    ],
-    [open, record?.sessions?.length, record?.workedMinutes]
-  );
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">

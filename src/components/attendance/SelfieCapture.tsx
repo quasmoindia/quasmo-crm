@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { FiCamera, FiRefreshCw } from 'react-icons/fi';
 import { Button } from '../Button';
 
 type SelfieCaptureProps = {
@@ -75,8 +76,16 @@ export function SelfieCapture({ onCapture, className = '' }: SelfieCaptureProps)
         </div>
       )}
       {!error && (
-        <Button type="button" className="mt-3 w-full" onClick={capture}>
-          {preview ? 'Retake selfie' : 'Capture selfie'}
+        <Button type="button" className="mt-3 w-full py-4 text-lg" onClick={capture}>
+          {preview ? (
+            <>
+              <FiRefreshCw className="size-6" /> Retake photo
+            </>
+          ) : (
+            <>
+              <FiCamera className="size-6" /> Take photo
+            </>
+          )}
         </Button>
       )}
     </div>

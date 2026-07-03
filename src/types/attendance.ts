@@ -241,6 +241,38 @@ export interface AttendanceSettingsWithSites extends AttendanceSettings {
   workSites?: WorkSite[];
 }
 
+export interface KioskTodayStatus {
+  open: boolean;
+  workedMinutes: number;
+  firstInAt?: string | null;
+  lastOutAt?: string | null;
+}
+
+export interface KioskDirectoryEntry extends PunchDirectoryEntry {
+  today: KioskTodayStatus;
+}
+
+export interface KioskDirectory {
+  workDate: string;
+  siteFiltered: boolean;
+  data: KioskDirectoryEntry[];
+}
+
+export interface KioskDevice {
+  _id: string;
+  name: string;
+  workSiteId: WorkSite | string;
+  isActive: boolean;
+  lastUsedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KioskDeviceCreateResult {
+  device: KioskDevice;
+  rawToken: string;
+}
+
 export interface CreateEmployeePayload {
   fullName: string;
   phone?: string;
