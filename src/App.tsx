@@ -33,6 +33,8 @@ import { AttendancePayrollHub } from './pages/attendance/AttendancePayrollHub';
 import { AttendanceSettings } from './pages/attendance/AttendanceSettings';
 import { AttendanceSelfPunch } from './pages/attendance/AttendanceSelfPunch';
 import { AttendancePunch } from './pages/attendance/AttendancePunch';
+import { KioskDevices } from './pages/attendance/KioskDevices';
+import { KioskSetup } from './pages/attendance/KioskSetup';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -95,6 +97,7 @@ function App() {
             <Route path="attendance/payroll" element={<AttendancePayrollHub />} />
             <Route path="attendance/reports" element={<Navigate to="/dashboard/attendance/payroll?tab=reports" replace />} />
             <Route path="attendance/settings" element={<AttendanceSettings />} />
+            <Route path="attendance/kiosk-devices" element={<KioskDevices />} />
             <Route path="attendance/my-punch" element={<AttendanceSelfPunch />} />
             {/* Sales / Finance / Content – commented for now
             <Route path="sales" element={<PlaceholderModule title="Sales management" />} />
@@ -103,6 +106,7 @@ function App() {
             */}
           </Route>
           <Route path="/attendance/punch" element={<AttendancePunch />} />
+          <Route path="/attendance/kiosk-setup" element={<KioskSetup />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
