@@ -71,6 +71,8 @@ export interface CreateExpensePayload {
   currency?: string;
   category: ExpenseCategory;
   expenseDate: string;
+  /** Admin-only: submit this expense on behalf of another user. Ignored for non-admins. */
+  submittedBy?: string;
 }
 
 export interface BulkExpenseItemPayload {
@@ -85,6 +87,8 @@ export interface BulkExpenseItemPayload {
 export interface CreateExpensesBulkPayload {
   batchTitle?: string;
   items: BulkExpenseItemPayload[];
+  /** Admin-only: submit this report on behalf of another user. Ignored for non-admins. */
+  submittedBy?: string;
 }
 
 export interface CreateExpensesBulkResponse {

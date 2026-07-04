@@ -1,18 +1,37 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { FiClock, FiDownload } from 'react-icons/fi';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { AttendanceStatusBadge } from '../../components/attendance/AttendanceStatusBadge';
 import { GpsStatusBanner } from '../../components/attendance/GpsStatusBanner';
 import { QuickPunchModal } from '../../components/attendance/QuickPunchModal';
+import { RegularizationRequestModal } from '../../components/attendance/RegularizationRequestModal';
 import {
+  downloadSelfPayslip,
   selfPunchInApi,
   selfPunchOutApi,
+  triggerBlobDownload,
+  useMyRegularizations,
   usePunchContext,
   useSelfContext,
+  useSelfPayroll,
 } from '../../api/attendance';
 import { useAttendanceGeolocation } from '../../hooks/useAttendanceGeolocation';
-import type { AttendanceRecord } from '../../types/attendance';
+import type { AttendanceRecord, RegularizationStatus } from '../../types/attendance';
+
+const REGULARIZATION_STATUS_STYLES: Record<RegularizationStatus, string> = {
+  pending: 'bg-amber-100 text-amber-800',
+  approved: 'bg-emerald-100 text-emerald-700',
+  rejected: 'bg-rose-100 text-rose-700',
+};
+
+function monthRange() {
+  const now = new Date();
+  const dateFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const dateTo = now.toISOString().slice(0, 10);
+  return { dateFrom, dateTo };
+}
 
 function formatMinutes(minutes?: number) {
   if (!minutes) return '0m';
@@ -33,6 +52,25 @@ export function AttendanceSelfPunch() {
   const geo = useAttendanceGeolocation(maxGps, true);
   const [punchMode, setPunchMode] = useState<'in' | 'out' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [regularizationOpen, setRegularizationOpen] = useState(false);
+  const [downloadingPayslip, setDownloadingPayslip] = useState(false);
+  const [payslipError, setPayslipError] = useState<string | null>(null);
+  const { dateFrom: monthFrom, dateTo: monthTo } = monthRange();
+  const myRegularizations = useMyRegularizations();
+  const selfPayroll = useSelfPayroll({ dateFrom: monthFrom, dateTo: monthTo, payComponent: 'all' });
+
+  const downloadPayslip = async () => {
+    setDownloadingPayslip(true);
+    setPayslipError(null);
+    try {
+      const blob = await downloadSelfPayslip({ dateFrom: monthFrom, dateTo: monthTo, payComponent: 'all' });
+      triggerBlobDownload(blob, `payslip-${monthFrom.slice(0, 7)}.pdf`);
+    } catch (e) {
+      setPayslipError(e instanceof Error ? e.message : 'Failed to download payslip');
+    } finally {
+      setDownloadingPayslip(false);
+    }
+  };
 
   const punchMutation = useMutation({
     mutationFn: async ({ mode, selfie }: { mode: 'in' | 'out'; selfie: Blob }) => {
@@ -141,6 +179,78 @@ export function AttendanceSelfPunch() {
         </div>
         {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
       </Card>
+
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-slate-800">My payroll</h2>
+            <p className="mt-1 text-sm text-slate-500">This month's earnings so far, and your downloadable payslip.</p>
+          </div>
+          <Button onClick={() => void downloadPayslip()} loading={downloadingPayslip} variant="outline">
+            <FiDownload className="size-4" /> Download payslip (PDF)
+          </Button>
+        </div>
+        {selfPayroll.data && (
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-lg font-bold text-slate-900">{selfPayroll.data.summary.workedDays}</p>
+              <p className="text-xs font-medium text-slate-500">Days worked</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-lg font-bold text-slate-900">₹{selfPayroll.data.summary.gross.toLocaleString('en-IN')}</p>
+              <p className="text-xs font-medium text-slate-500">Gross earnings</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-lg font-bold text-rose-600">−₹{selfPayroll.data.summary.totalDeductions.toLocaleString('en-IN')}</p>
+              <p className="text-xs font-medium text-slate-500">Deductions</p>
+            </div>
+            <div className="rounded-xl bg-emerald-50 px-4 py-3">
+              <p className="text-lg font-bold text-emerald-700">₹{selfPayroll.data.summary.netPay.toLocaleString('en-IN')}</p>
+              <p className="text-xs font-medium text-emerald-700">Net pay (est.)</p>
+            </div>
+          </div>
+        )}
+        {payslipError ? <p className="mt-3 text-sm text-rose-600">{payslipError}</p> : null}
+      </Card>
+
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-slate-800">Attendance corrections</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Missed a punch, or was marked absent by mistake? Request a fix — HR will review it.
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => setRegularizationOpen(true)}>
+            <FiClock className="size-4" /> Request correction
+          </Button>
+        </div>
+        <div className="mt-4 space-y-2">
+          {(myRegularizations.data?.data ?? []).length === 0 && (
+            <p className="text-sm text-slate-400">No correction requests yet.</p>
+          )}
+          {(myRegularizations.data?.data ?? []).map((req) => (
+            <div key={req._id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <div>
+                <span className="font-medium text-slate-800">{req.workDate}</span>
+                <span className="ml-2 text-slate-500">{req.reason}</span>
+              </div>
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${REGULARIZATION_STATUS_STYLES[req.status]}`}>
+                {req.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <RegularizationRequestModal
+        open={regularizationOpen}
+        onClose={() => setRegularizationOpen(false)}
+        onSuccess={() => {
+          setRegularizationOpen(false);
+          void myRegularizations.refetch();
+        }}
+      />
 
       <QuickPunchModal
         open={punchMode !== null}

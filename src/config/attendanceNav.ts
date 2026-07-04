@@ -1,7 +1,9 @@
 import type { IconType } from 'react-icons';
 import {
   FiCalendar,
+  FiCreditCard,
   FiDollarSign,
+  FiEdit3,
   FiGrid,
   FiSettings,
   FiTablet,
@@ -16,6 +18,8 @@ export type AttendanceNavPermission =
   | 'roster'
   | 'sitesShifts'
   | 'kioskDevices'
+  | 'regularizations'
+  | 'idCards'
   | 'timeOff'
   | 'payrollHub'
   | 'settings'
@@ -43,6 +47,8 @@ export const ATTENDANCE_NAV_ITEMS: AttendanceNavItem[] = [
   { path: '/dashboard/attendance/roster', label: 'Quick punch', end: false, icon: FiUserCheck, permission: 'roster' },
   { path: '/dashboard/attendance/employees', label: 'Employees', end: false, icon: FiUsers, permission: 'core' },
   { path: '/dashboard/attendance/kiosk-devices', label: 'Kiosk devices', end: false, icon: FiTablet, permission: 'kioskDevices' },
+  { path: '/dashboard/attendance/regularizations', label: 'Corrections', end: false, icon: FiEdit3, permission: 'regularizations' },
+  { path: '/dashboard/attendance/id-cards', label: 'ID cards', end: false, icon: FiCreditCard, permission: 'idCards' },
   { path: '/dashboard/attendance/time-off', label: 'Time off', end: false, icon: FiCalendar, permission: 'timeOff', activePaths: ['/dashboard/attendance/time-off', '/dashboard/attendance/leaves', '/dashboard/attendance/holidays'] },
   { path: '/dashboard/attendance/payroll', label: 'Payroll', end: false, icon: FiDollarSign, permission: 'payrollHub', activePaths: ['/dashboard/attendance/payroll', '/dashboard/attendance/reports'] },
   { path: '/dashboard/attendance/settings', label: 'Settings', end: false, icon: FiSettings, permission: 'settings' },
@@ -62,6 +68,8 @@ export type AttendanceNavAccess = {
   canViewRoster: boolean;
   canViewSitesShifts: boolean;
   canViewKioskDevices: boolean;
+  canViewRegularizations: boolean;
+  canViewIdCards: boolean;
   canViewReports: boolean;
   canViewPayroll: boolean;
   canViewLeaves: boolean;
@@ -79,6 +87,8 @@ export function getAttendanceNavAccess(role?: string): AttendanceNavAccess {
     canViewRoster: hr,
     canViewSitesShifts: hr,
     canViewKioskDevices: hr,
+    canViewRegularizations: hr || manager,
+    canViewIdCards: hr,
     canViewReports: hr || manager,
     canViewPayroll: hr,
     canViewLeaves: hr || manager,
@@ -101,6 +111,10 @@ export function canAccessAttendanceNavItem(
       return access.canViewSitesShifts;
     case 'kioskDevices':
       return access.canViewKioskDevices;
+    case 'regularizations':
+      return access.canViewRegularizations;
+    case 'idCards':
+      return access.canViewIdCards;
     case 'timeOff':
       return access.canViewLeaves || access.canViewHolidays;
     case 'payrollHub':
@@ -130,6 +144,8 @@ export function getAttendancePermissionForPath(pathname: string): AttendanceNavP
   if (pathname.includes('/sites')) return 'sitesShifts';
   if (pathname.includes('/shifts')) return 'sitesShifts';
   if (pathname.includes('/kiosk-devices')) return 'kioskDevices';
+  if (pathname.includes('/regularizations')) return 'regularizations';
+  if (pathname.includes('/id-cards')) return 'idCards';
   if (pathname.includes('/settings')) return 'settings';
   if (pathname.includes('/time-off') || pathname.includes('/leaves') || pathname.includes('/holidays')) {
     return 'timeOff';

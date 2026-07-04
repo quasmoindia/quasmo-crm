@@ -16,6 +16,12 @@ import type {
   ExpenseCategory,
 } from '../types/expense';
 
+export interface ExpenseAssignableUser {
+  _id: string;
+  fullName: string;
+  email: string;
+}
+
 const BASE = '/expenses';
 export const expensesQueryKey = ['expenses'];
 
@@ -59,12 +65,17 @@ export function getExpenseApi(id: string) {
   return get<Expense>(`${BASE}/${id}`);
 }
 
-export function getExpenseAnalyticsApi(params?: { dateFrom?: string; dateTo?: string }) {
+export function getExpenseAnalyticsApi(params?: { dateFrom?: string; dateTo?: string; submittedBy?: string }) {
   const sp = new URLSearchParams();
   if (params?.dateFrom) sp.set('dateFrom', params.dateFrom);
   if (params?.dateTo) sp.set('dateTo', params.dateTo);
+  if (params?.submittedBy) sp.set('submittedBy', params.submittedBy);
   const q = sp.toString();
   return get<ExpenseAnalytics>(q ? `${BASE}/analytics?${q}` : `${BASE}/analytics`);
+}
+
+export function listExpenseAssignableUsersApi() {
+  return get<{ data: ExpenseAssignableUser[] }>(`${BASE}/users`);
 }
 
 export function createExpenseApi(payload: CreateExpensePayload) {
@@ -143,11 +154,19 @@ export function useExpense(id: string | null) {
   });
 }
 
-export function useExpenseAnalytics(params?: { dateFrom?: string; dateTo?: string }) {
+export function useExpenseAnalytics(params?: { dateFrom?: string; dateTo?: string; submittedBy?: string }) {
   return useQuery({
     queryKey: [...expensesQueryKey, 'analytics', params],
     queryFn: () => getExpenseAnalyticsApi(params),
     staleTime: 30_000,
+  });
+}
+
+export function useExpenseAssignableUsers(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...expensesQueryKey, 'assignable-users'],
+    queryFn: listExpenseAssignableUsersApi,
+    enabled: options?.enabled ?? true,
   });
 }
 

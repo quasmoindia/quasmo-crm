@@ -268,6 +268,22 @@ export interface KioskDevice {
   updatedAt: string;
 }
 
+export type RegularizationStatus = 'pending' | 'approved' | 'rejected';
+
+export interface RegularizationRequest {
+  _id: string;
+  employeeId: { _id: string; fullName: string; employeeCode: string; department?: string; referencePhotoUrl?: string } | string;
+  workDate: string;
+  requestedInAt?: string;
+  requestedOutAt?: string;
+  reason: string;
+  status: RegularizationStatus;
+  reviewedBy?: { _id: string; fullName: string; email: string } | string;
+  reviewedAt?: string;
+  reviewNote?: string;
+  createdAt: string;
+}
+
 export interface KioskDeviceCreateResult {
   device: KioskDevice;
   rawToken: string;

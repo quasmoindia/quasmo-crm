@@ -1,13 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { FiCamera, FiRefreshCw } from 'react-icons/fi';
 import { Button } from '../Button';
 
 type SelfieCaptureProps = {
   onCapture: (blob: Blob) => void;
   className?: string;
+  /** Overrides the default "Take photo" button label/icon (e.g. a one-tap "Punch in" action). */
+  captureLabel?: ReactNode;
+  variant?: 'primary' | 'secondary' | 'outline' | 'success' | 'danger';
+  disabled?: boolean;
 };
 
-export function SelfieCapture({ onCapture, className = '' }: SelfieCaptureProps) {
+export function SelfieCapture({
+  onCapture,
+  className = '',
+  captureLabel,
+  variant = 'primary',
+  disabled,
+}: SelfieCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -76,15 +87,23 @@ export function SelfieCapture({ onCapture, className = '' }: SelfieCaptureProps)
         </div>
       )}
       {!error && (
-        <Button type="button" className="mt-3 w-full py-4 text-lg" onClick={capture}>
+        <Button
+          type="button"
+          variant={variant}
+          disabled={disabled}
+          className="mt-3 w-full py-4 text-lg"
+          onClick={capture}
+        >
           {preview ? (
             <>
               <FiRefreshCw className="size-6" /> Retake photo
             </>
           ) : (
-            <>
-              <FiCamera className="size-6" /> Take photo
-            </>
+            (captureLabel ?? (
+              <>
+                <FiCamera className="size-6" /> Take photo
+              </>
+            ))
           )}
         </Button>
       )}

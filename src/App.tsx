@@ -35,6 +35,8 @@ import { AttendanceSelfPunch } from './pages/attendance/AttendanceSelfPunch';
 import { AttendancePunch } from './pages/attendance/AttendancePunch';
 import { KioskDevices } from './pages/attendance/KioskDevices';
 import { KioskSetup } from './pages/attendance/KioskSetup';
+import { AttendanceRegularizations } from './pages/attendance/AttendanceRegularizations';
+import { IdCards } from './pages/attendance/IdCards';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -98,6 +100,8 @@ function App() {
             <Route path="attendance/reports" element={<Navigate to="/dashboard/attendance/payroll?tab=reports" replace />} />
             <Route path="attendance/settings" element={<AttendanceSettings />} />
             <Route path="attendance/kiosk-devices" element={<KioskDevices />} />
+            <Route path="attendance/regularizations" element={<AttendanceRegularizations />} />
+            <Route path="attendance/id-cards" element={<IdCards />} />
             <Route path="attendance/my-punch" element={<AttendanceSelfPunch />} />
             {/* Sales / Finance / Content – commented for now
             <Route path="sales" element={<PlaceholderModule title="Sales management" />} />

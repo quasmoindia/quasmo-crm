@@ -26,6 +26,7 @@ import type {
   PayrollEmployeeDetail,
   PayrollReport,
   PunchResult,
+  RegularizationRequest,
   RosterToday,
   SelfPunchContext,
   Shift,
@@ -757,6 +758,79 @@ export async function selfPunchOutApi(payload: {
   return crmMultipart<PunchResult>(`${SELF}/out`, form);
 }
 
+export function useSelfPayroll(params: { dateFrom: string; dateTo: string; payComponent?: PayComponent }, enabled = true) {
+  const queryParams: Record<string, string> = { dateFrom: params.dateFrom, dateTo: params.dateTo };
+  if (params.payComponent) queryParams.payComponent = params.payComponent;
+  return useQuery({
+    queryKey: ['attendance', 'self-payroll', params],
+    queryFn: () => get<PayrollEmployeeDetail>(`${SELF}/payroll`, { params: queryParams }),
+    enabled,
+  });
+}
+
+/** Downloads the logged-in user's own payslip as a PDF (available to every role, no module required). */
+export async function downloadSelfPayslip(params: { dateFrom: string; dateTo: string; payComponent?: PayComponent; companyName?: string }) {
+  const token = localStorage.getItem('token');
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const qs = new URLSearchParams({ dateFrom: params.dateFrom, dateTo: params.dateTo });
+  if (params.payComponent) qs.set('payComponent', params.payComponent);
+  if (params.companyName) qs.set('companyName', params.companyName);
+  const res = await fetch(`${base}/${BASE.replace(/^\//, '')}/punch/self/payslip/pdf?${qs.toString()}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error('Failed to generate payslip');
+  return res.blob();
+}
+
+// ─── Attendance regularization (employee request → HR approve/reject) ────────
+
+export function useMyRegularizations() {
+  return useQuery({
+    queryKey: ['attendance', 'regularizations', 'mine'],
+    queryFn: () => get<{ linked: boolean; data: RegularizationRequest[] }>(`${BASE}/regularizations/mine`),
+  });
+}
+
+export function useRequestRegularization() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { workDate: string; requestedInAt?: string; requestedOutAt?: string; reason: string }) =>
+      post<RegularizationRequest>(`${BASE}/regularizations`, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'regularizations', 'mine'] }),
+  });
+}
+
+export function useRegularizations(params?: { status?: string }) {
+  const queryParams: Record<string, string> = {};
+  if (params?.status) queryParams.status = params.status;
+  return useQuery({
+    queryKey: ['attendance', 'regularizations', params],
+    queryFn: () => get<{ data: RegularizationRequest[] }>(`${BASE}/regularizations`, { params: queryParams }),
+  });
+}
+
+export function useApproveRegularization() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reviewNote }: { id: string; reviewNote?: string }) =>
+      patch<{ request: RegularizationRequest }>(`${BASE}/regularizations/${id}/approve`, { reviewNote }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance', 'regularizations'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'records'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'roster'] });
+    },
+  });
+}
+
+export function useRejectRegularization() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reviewNote }: { id: string; reviewNote?: string }) =>
+      patch<{ request: RegularizationRequest }>(`${BASE}/regularizations/${id}/reject`, { reviewNote }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'regularizations'] }),
+  });
+}
+
 // ─── Punch API (public / employee token) ─────────────────────────────────────
 
 export async function requestEmployeeOtpApi(payload: { employeeCode?: string; phone?: string }) {
@@ -935,4 +1009,69 @@ export async function downloadReportExport(params: { dateFrom?: string; dateTo?:
   const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (!res.ok) throw new Error('Export failed');
   return res.blob();
+}
+
+// ─── HR payslip PDFs ───────────────────────────────────────────────────────────
+
+async function authedBlobGet(path: string, params: Record<string, string>): Promise<Blob> {
+  const token = localStorage.getItem('token');
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const qs = new URLSearchParams(params);
+  const res = await fetch(`${base}/${BASE.replace(/^\//, '')}/${path.replace(/^\//, '')}?${qs.toString()}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error('Failed to generate PDF');
+  return res.blob();
+}
+
+async function authedBlobPost(path: string, body: unknown): Promise<Blob> {
+  const token = localStorage.getItem('token');
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const res = await fetch(`${base}/${BASE.replace(/^\//, '')}/${path.replace(/^\//, '')}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { message?: string }).message ?? 'Failed to generate PDF');
+  }
+  return res.blob();
+}
+
+export async function downloadPayslipPdf(employeeId: string, params: { dateFrom: string; dateTo: string; payComponent?: PayComponent; companyName?: string }) {
+  const queryParams: Record<string, string> = { dateFrom: params.dateFrom, dateTo: params.dateTo };
+  if (params.payComponent) queryParams.payComponent = params.payComponent;
+  if (params.companyName) queryParams.companyName = params.companyName;
+  return authedBlobGet(`reports/payroll/employee/${employeeId}/payslip.pdf`, queryParams);
+}
+
+export async function downloadBulkPayslipsPdf(payload: {
+  employeeIds?: string[];
+  dateFrom: string;
+  dateTo: string;
+  payComponent?: PayComponent;
+  companyName?: string;
+}) {
+  return authedBlobPost('reports/payroll/payslips/bulk', payload);
+}
+
+// ─── ID cards (HR-only bulk/single generation) ────────────────────────────────
+
+export async function generateIdCardsPdf(payload: { employeeIds?: string[]; companyName?: string; companyAddress?: string }) {
+  return authedBlobPost('employees/id-cards', payload);
+}
+
+export function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
