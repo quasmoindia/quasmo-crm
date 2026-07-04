@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FiDownload } from 'react-icons/fi';
+import { FiDownload, FiFileText } from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
 import { DataTable } from '../../components/DataTable';
 import {
+  downloadBulkPayslipsPdf,
   downloadPayrollExport,
+  downloadPayslipPdf,
+  triggerBlobDownload,
   useCreateAdjustment,
   useDeleteAdjustment,
   usePayrollAdjustments,
@@ -52,6 +55,9 @@ export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) 
   const [exportError, setExportError] = useState<string | null>(null);
   const [payslipRow, setPayslipRow] = useState<PayrollRow | null>(null);
   const [detailRow, setDetailRow] = useState<PayrollRow | null>(null);
+  const [downloadingPayslips, setDownloadingPayslips] = useState(false);
+  const [payslipRowDownloadingId, setPayslipRowDownloadingId] = useState<string | null>(null);
+  const [payslipDownloadError, setPayslipDownloadError] = useState<string | null>(null);
   const { data, isLoading, error } = usePayrollReport({
     dateFrom,
     dateTo,
@@ -98,6 +104,37 @@ export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) 
     }
   };
 
+  const handleBulkPayslips = async () => {
+    setDownloadingPayslips(true);
+    setPayslipDownloadError(null);
+    try {
+      const blob = await downloadBulkPayslipsPdf({
+        employeeIds: filteredRows.map((r) => r.employeeId),
+        dateFrom,
+        dateTo,
+        payComponent,
+      });
+      triggerBlobDownload(blob, `payslips-${payComponent}-${dateFrom}-${dateTo}.pdf`);
+    } catch (e) {
+      setPayslipDownloadError(e instanceof Error ? e.message : 'Failed to generate payslips');
+    } finally {
+      setDownloadingPayslips(false);
+    }
+  };
+
+  const handleRowPayslip = async (row: PayrollRow) => {
+    setPayslipRowDownloadingId(row.employeeId);
+    setPayslipDownloadError(null);
+    try {
+      const blob = await downloadPayslipPdf(row.employeeId, { dateFrom, dateTo, payComponent });
+      triggerBlobDownload(blob, `payslip-${row.employeeCode}-${dateFrom}.pdf`);
+    } catch (e) {
+      setPayslipDownloadError(e instanceof Error ? e.message : 'Failed to generate payslip');
+    } finally {
+      setPayslipRowDownloadingId(null);
+    }
+  };
+
   const totals = data?.totals;
   const policy = data?.policy;
 
@@ -123,11 +160,17 @@ export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) 
           </p>
         )}
         {canExport && (
-          <Button onClick={handleExport} loading={exporting}>
-            <FiDownload className="size-4" /> Export CSV
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => void handleBulkPayslips()} loading={downloadingPayslips}>
+              <FiFileText className="size-4" /> Download payslips (PDF)
+            </Button>
+            <Button onClick={handleExport} loading={exporting}>
+              <FiDownload className="size-4" /> Export CSV
+            </Button>
+          </div>
         )}
       </div>
+      {payslipDownloadError && <p className="mb-3 text-sm text-rose-600">{payslipDownloadError}</p>}
 
       <Card className="mb-4">
         <p className="mb-3 text-sm font-semibold text-slate-700">Pay run type</p>
@@ -205,6 +248,14 @@ export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) 
               </button>
               <button type="button" className="text-sm text-[#305dff] hover:underline" onClick={() => setPayslipRow(r)}>
                 Payslip
+              </button>
+              <button
+                type="button"
+                className="text-sm text-[#305dff] hover:underline disabled:opacity-50"
+                disabled={payslipRowDownloadingId === r.employeeId}
+                onClick={() => void handleRowPayslip(r)}
+              >
+                {payslipRowDownloadingId === r.employeeId ? 'Generating…' : 'PDF'}
               </button>
             </div>
           )}

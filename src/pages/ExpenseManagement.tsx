@@ -12,6 +12,7 @@ import { useCurrentUser } from '../api/auth';
 import {
   useExpensesList,
   useExpenseAnalytics,
+  useExpenseAssignableUsers,
   useCreateExpense,
   useCreateExpensesBulk,
   useUpdateExpense,
@@ -22,6 +23,7 @@ import {
   uploadExpenseReceiptApi,
   expensesQueryKey,
 } from '../api/expenses';
+import type { ExpenseAssignableUser } from '../api/expenses';
 import type {
   Expense,
   ExpenseStatus,
@@ -256,8 +258,8 @@ function KpiCard({ label, value, sub, accent, icon }: {
 
 // ─── Analytics Sidebar ────────────────────────────────────────────────────────
 
-function AnalyticsSidebar() {
-  const { data: analytics, isLoading } = useExpenseAnalytics();
+function AnalyticsSidebar({ submittedBy }: { submittedBy?: string }) {
+  const { data: analytics, isLoading } = useExpenseAnalytics({ submittedBy });
 
   const totals = analytics?.totals;
   const catData = (analytics?.categorySummary ?? []).slice(0, 6);
@@ -354,8 +356,12 @@ function AnalyticsSidebar() {
 
 // ─── Create / Edit Modal ──────────────────────────────────────────────────────
 
-function ExpenseFormModal({ expense, onClose, onSaved }: {
-  expense?: Expense | null; onClose: () => void; onSaved: () => void;
+function ExpenseFormModal({ expense, isAdmin, assignableUsers, onClose, onSaved }: {
+  expense?: Expense | null;
+  isAdmin: boolean;
+  assignableUsers: ExpenseAssignableUser[];
+  onClose: () => void;
+  onSaved: () => void;
 }) {
   const isEdit = !!expense;
   const createMut = useCreateExpense();
@@ -369,6 +375,7 @@ function ExpenseFormModal({ expense, onClose, onSaved }: {
   const [expenseDate, setExpenseDate] = useState(
     expense?.expenseDate ? expense.expenseDate.slice(0, 10) : new Date().toISOString().slice(0, 10)
   );
+  const [submittedByUserId, setSubmittedByUserId] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -398,7 +405,14 @@ function ExpenseFormModal({ expense, onClose, onSaved }: {
         saved = await updateMut.mutateAsync({ id: expense._id, payload });
         if (receiptFile) await uploadReceiptMut.mutateAsync(receiptFile);
       } else {
-        const payload: CreateExpensePayload = { title: title.trim(), description: description.trim() || undefined, amount: numAmount, category, expenseDate };
+        const payload: CreateExpensePayload = {
+          title: title.trim(),
+          description: description.trim() || undefined,
+          amount: numAmount,
+          category,
+          expenseDate,
+          submittedBy: isAdmin && submittedByUserId ? submittedByUserId : undefined,
+        };
         saved = await createMut.mutateAsync(payload);
         if (receiptFile) await uploadExpenseReceiptApi(saved._id, receiptFile);
       }
@@ -426,6 +440,16 @@ function ExpenseFormModal({ expense, onClose, onSaved }: {
           )}
 
           <Input label="Title *" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Client dinner, Flight to Delhi…" disabled={isPending} />
+
+          {isAdmin && !isEdit && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Submit for</label>
+              <select value={submittedByUserId} onChange={(e) => setSubmittedByUserId(e.target.value)} disabled={isPending} className={SEL}>
+                <option value="">Myself</option>
+                {assignableUsers.map((u) => <option key={u._id} value={u._id}>{u.fullName}</option>)}
+              </select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -512,11 +536,17 @@ function emptyLine(defaultDate: string): ExpenseLineRow {
   };
 }
 
-function BulkExpenseReportModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function BulkExpenseReportModal({ isAdmin, assignableUsers, onClose, onSaved }: {
+  isAdmin: boolean;
+  assignableUsers: ExpenseAssignableUser[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const bulkMut = useCreateExpensesBulk();
   const qc = useQueryClient();
   const today = new Date().toISOString().slice(0, 10);
   const [batchTitle, setBatchTitle] = useState('');
+  const [submittedByUserId, setSubmittedByUserId] = useState('');
   const [defaultDate, setDefaultDate] = useState(today);
   const [rows, setRows] = useState<ExpenseLineRow[]>(() => [emptyLine(today), emptyLine(today), emptyLine(today)]);
   const [error, setError] = useState<string | null>(null);
@@ -578,6 +608,7 @@ function BulkExpenseReportModal({ onClose, onSaved }: { onClose: () => void; onS
     try {
       const result = await bulkMut.mutateAsync({
         batchTitle: batchTitle.trim() || undefined,
+        submittedBy: isAdmin && submittedByUserId ? submittedByUserId : undefined,
         items: validRows.map((r) => ({
           title: r.title.trim(),
           description: r.description.trim() || undefined,
@@ -624,7 +655,7 @@ function BulkExpenseReportModal({ onClose, onSaved }: { onClose: () => void; onS
               </div>
             )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="sm:col-span-2">
+              <div className={isAdmin ? '' : 'sm:col-span-2'}>
                 <Input
                   label="Report title (optional)"
                   value={batchTitle}
@@ -633,6 +664,15 @@ function BulkExpenseReportModal({ onClose, onSaved }: { onClose: () => void; onS
                   disabled={isPending}
                 />
               </div>
+              {isAdmin && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Submit for</label>
+                  <select value={submittedByUserId} onChange={(e) => setSubmittedByUserId(e.target.value)} disabled={isPending} className={SEL}>
+                    <option value="">Myself</option>
+                    {assignableUsers.map((u) => <option key={u._id} value={u._id}>{u.fullName}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">Default date</label>
                 <div className="flex gap-2">
@@ -1147,6 +1187,7 @@ export function ExpenseManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ExpenseStatus | ''>('');
   const [categoryFilter, setCategoryFilter] = useState<ExpenseCategory | ''>('');
+  const [submittedByFilter, setSubmittedByFilter] = useState('');
 
   const [formOpen, setFormOpen] = useState(false);
   const [bulkFormOpen, setBulkFormOpen] = useState(false);
@@ -1157,11 +1198,14 @@ export function ExpenseManagement() {
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
 
   const deleteMut = useDeleteExpense();
+  const { data: assignableUsersData } = useExpenseAssignableUsers({ enabled: isAdmin });
+  const assignableUsers = assignableUsersData?.data ?? [];
 
   const { data, isLoading, isError, error } = useExpensesList({
     search: searchQuery || undefined,
     status: statusFilter || undefined,
     category: categoryFilter || undefined,
+    submittedBy: isAdmin ? submittedByFilter || undefined : undefined,
     page,
     limit,
   });
@@ -1242,7 +1286,7 @@ export function ExpenseManagement() {
   }
 
   const SEL = 'rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 shadow-sm focus:border-indigo-400 focus:outline-none';
-  const hasFilters = statusFilter || categoryFilter;
+  const hasFilters = statusFilter || categoryFilter || submittedByFilter;
 
   return (
     <div className="flex h-full flex-col gap-5">
@@ -1267,7 +1311,7 @@ export function ExpenseManagement() {
 
         {/* LEFT: Analytics sidebar */}
         <div className="shrink-0 xl:w-64 2xl:w-72">
-          <AnalyticsSidebar />
+          <AnalyticsSidebar submittedBy={isAdmin ? submittedByFilter || undefined : undefined} />
         </div>
 
         {/* RIGHT: Table takes all remaining space */}
@@ -1301,8 +1345,16 @@ export function ExpenseManagement() {
               {EXPENSE_CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{EXPENSE_CATEGORY_ICONS[o.value]} {o.label}</option>)}
             </select>
 
+            {/* Submitted-by filter (admin only) */}
+            {isAdmin && (
+              <select value={submittedByFilter} onChange={(e) => { setSubmittedByFilter(e.target.value); setPage(1); }} className={SEL}>
+                <option value="">All users</option>
+                {assignableUsers.map((u) => <option key={u._id} value={u._id}>{u.fullName}</option>)}
+              </select>
+            )}
+
             {hasFilters && (
-              <button type="button" onClick={() => { setStatusFilter(''); setCategoryFilter(''); setPage(1); }}
+              <button type="button" onClick={() => { setStatusFilter(''); setCategoryFilter(''); setSubmittedByFilter(''); setPage(1); }}
                 className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-200">
                 <FiX className="size-3" /> Clear
               </button>
@@ -1433,12 +1485,16 @@ export function ExpenseManagement() {
       {formOpen && (
         <ExpenseFormModal
           expense={editingExpense}
+          isAdmin={isAdmin}
+          assignableUsers={assignableUsers}
           onClose={() => { setFormOpen(false); setEditingExpense(null); }}
           onSaved={() => { setFormOpen(false); setEditingExpense(null); }}
         />
       )}
       {bulkFormOpen && (
         <BulkExpenseReportModal
+          isAdmin={isAdmin}
+          assignableUsers={assignableUsers}
           onClose={() => setBulkFormOpen(false)}
           onSaved={() => setBulkFormOpen(false)}
         />

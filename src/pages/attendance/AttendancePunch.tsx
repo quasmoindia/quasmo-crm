@@ -184,16 +184,17 @@ export function AttendancePunch() {
     }
   };
 
-  const submitPunch = async () => {
-    if (!coords || !selfie) return;
+  const submitPunch = async (selfieOverride?: Blob) => {
+    const selfieToSubmit = selfieOverride ?? selfie;
+    if (!coords || !selfieToSubmit) return;
     setLoading(true);
     try {
       if (isKioskDevice) {
-        const payload = { employeeId: selectedEmployee!._id, ...coords, selfie };
+        const payload = { employeeId: selectedEmployee!._id, ...coords, selfie: selfieToSubmit };
         if (action === 'in') await kioskPunchInApi(payload);
         else await kioskPunchOutApi(payload);
       } else {
-        const payload = { ...coords, selfie };
+        const payload = { ...coords, selfie: selfieToSubmit };
         if (action === 'in') await punchInApi(payload);
         else await punchOutApi(payload);
       }
@@ -523,17 +524,35 @@ export function AttendancePunch() {
               {action === 'in' ? 'Punching IN' : 'Punching OUT'}
             </div>
             <GeofenceWarningBanner preview={preview} />
-            <SelfieCapture className="mt-4" onCapture={setSelfie} />
-            <Button
-              variant={action === 'in' ? 'success' : 'danger'}
-              className="mt-4 w-full py-5 text-xl"
-              disabled={!selfie}
-              loading={loading}
-              onClick={submitPunch}
-            >
-              {action === 'in' ? <FiLogIn className="size-6" /> : <FiLogOut className="size-6" />}
-              Confirm {action === 'in' ? 'punch in' : 'punch out'}
-            </Button>
+            <SelfieCapture
+              className="mt-4"
+              onCapture={(blob) => {
+                setSelfie(blob);
+                if (isKioskDevice) void submitPunch(blob);
+              }}
+              variant={isKioskDevice ? (action === 'in' ? 'success' : 'danger') : 'primary'}
+              disabled={isKioskDevice && loading}
+              captureLabel={
+                isKioskDevice ? (
+                  <>
+                    {action === 'in' ? <FiLogIn className="size-6" /> : <FiLogOut className="size-6" />}
+                    {loading ? 'Submitting…' : action === 'in' ? 'Tap to punch IN' : 'Tap to punch OUT'}
+                  </>
+                ) : undefined
+              }
+            />
+            {!isKioskDevice && (
+              <Button
+                variant="primary"
+                className="mt-4 w-full py-5 text-xl"
+                disabled={!selfie}
+                loading={loading}
+                onClick={() => void submitPunch()}
+              >
+                {action === 'in' ? <FiLogIn className="size-6" /> : <FiLogOut className="size-6" />}
+                Confirm {action === 'in' ? 'punch in' : 'punch out'}
+              </Button>
+            )}
           </div>
         )}
 
