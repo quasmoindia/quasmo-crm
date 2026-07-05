@@ -23,6 +23,7 @@ import {
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { SelfieCapture } from '../../components/attendance/SelfieCapture';
+import type { SelfieCaptureHandle } from '../../components/attendance/SelfieCapture';
 import { GeofenceWarningBanner } from '../../components/attendance/GeofenceWarningBanner';
 import { GpsStatusBanner } from '../../components/attendance/GpsStatusBanner';
 import { PunchConfirmModal } from '../../components/attendance/PunchConfirmModal';
@@ -71,6 +72,7 @@ export function AttendancePunch() {
     data: kioskDirectoryData,
     isLoading: loadingKioskDirectory,
     error: kioskDirectoryError,
+    refetch: refetchKioskDirectory,
   } = useKioskDirectory(isKioskDevice && step === 'login');
   const [employeeCode, setEmployeeCode] = useState('');
   const [phone, setPhone] = useState('');
@@ -86,6 +88,7 @@ export function AttendancePunch() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [autoReturnIn, setAutoReturnIn] = useState<number | null>(null);
   const resetToLoginRef = useRef<() => void>(() => {});
+  const selfieCaptureRef = useRef<SelfieCaptureHandle>(null);
 
   const loadToday = async () => {
     const res = await myTodayApi();
@@ -107,6 +110,15 @@ export function AttendancePunch() {
       unpairAndRedirect();
     }
   }, [isKioskDevice, kioskDirectoryError]);
+
+  // The directory query has a staleTime, so simply becoming "enabled" again
+  // when we return to the photo grid isn't enough to guarantee a refetch —
+  // force one every time so punch statuses (in/out) are never stale.
+  useEffect(() => {
+    if (isKioskDevice && step === 'login') {
+      void refetchKioskDirectory();
+    }
+  }, [isKioskDevice, step, refetchKioskDirectory]);
 
   const requestOtp = async (code?: string) => {
     const codeVal = (code ?? employeeCode).trim();
@@ -167,47 +179,83 @@ export function AttendancePunch() {
     setAction(kind);
     setLoading(true);
     try {
-      const p = isKioskDevice
-        ? await kioskPunchPreviewApi({ employeeId: selectedEmployee!._id, ...coords })
-        : await punchPreviewApi(coords);
+      const p = await punchPreviewApi(coords);
       setPreview(p);
       if (p.insideGeofence) setStep('selfie');
       else setConfirmOpen(true);
     } catch (e) {
-      if (isKioskUnauthorizedError(e)) {
-        unpairAndRedirect();
-        return;
-      }
       setMessage((e as Error).message);
     } finally {
       setLoading(false);
     }
   };
 
-  const submitPunch = async (selfieOverride?: Blob) => {
+  // Kiosk devices capture + submit in one tap: the camera is already live on
+  // the home screen, so tapping Punch In/Out grabs the current frame and
+  // submits immediately — no separate "review photo" screen. The only time
+  // this pauses for a second tap is the rare outside-geofence confirmation.
+  const captureAndSubmit = async (kind: 'in' | 'out') => {
+    const blob = await selfieCaptureRef.current?.capture();
+    if (!blob) {
+      setMessage('Could not capture photo. Make sure the camera is visible and try again.');
+      setLoading(false);
+      return;
+    }
+    await submitPunch(blob, kind);
+  };
+
+  const handleKioskPunch = async (kind: 'in' | 'out') => {
+    if (!coords) return;
+    setAction(kind);
+    setLoading(true);
+    try {
+      const p = await kioskPunchPreviewApi({ employeeId: selectedEmployee!._id, ...coords });
+      setPreview(p);
+      if (p.insideGeofence) {
+        await captureAndSubmit(kind);
+      } else {
+        setConfirmOpen(true);
+        setLoading(false);
+      }
+    } catch (e) {
+      if (isKioskUnauthorizedError(e)) {
+        unpairAndRedirect();
+        return;
+      }
+      setMessage((e as Error).message);
+      setLoading(false);
+    }
+  };
+
+  const submitPunch = async (selfieOverride?: Blob, kindOverride?: 'in' | 'out') => {
     const selfieToSubmit = selfieOverride ?? selfie;
+    const kind = kindOverride ?? action;
     if (!coords || !selfieToSubmit) return;
     setLoading(true);
     try {
       if (isKioskDevice) {
         const payload = { employeeId: selectedEmployee!._id, ...coords, selfie: selfieToSubmit };
-        if (action === 'in') await kioskPunchInApi(payload);
+        if (kind === 'in') await kioskPunchInApi(payload);
         else await kioskPunchOutApi(payload);
       } else {
         const payload = { ...coords, selfie: selfieToSubmit };
-        if (action === 'in') await punchInApi(payload);
+        if (kind === 'in') await punchInApi(payload);
         else await punchOutApi(payload);
       }
-      setMessage(`${action === 'in' ? 'Punch in' : 'Punch out'} recorded`);
+      setMessage(`${kind === 'in' ? 'Punch in' : 'Punch out'} recorded`);
+      setAction(kind);
       setStep('done');
       if (isKioskDevice) {
-        vibrate(action === 'in' ? 150 : [100, 80, 100]);
+        vibrate(kind === 'in' ? 150 : [100, 80, 100]);
         setKioskToday({
-          open: action === 'in',
+          open: kind === 'in',
           workedMinutes: kioskToday?.workedMinutes ?? 0,
-          firstInAt: action === 'in' ? new Date().toISOString() : kioskToday?.firstInAt ?? null,
-          lastOutAt: action === 'out' ? new Date().toISOString() : kioskToday?.lastOutAt ?? null,
+          firstInAt: kind === 'in' ? new Date().toISOString() : kioskToday?.firstInAt ?? null,
+          lastOutAt: kind === 'out' ? new Date().toISOString() : kioskToday?.lastOutAt ?? null,
         });
+        // Refresh the directory now (not just when we land back on the grid)
+        // so the cached "currently IN" statuses can't be shown stale.
+        void refetchKioskDirectory();
       } else {
         await loadToday();
       }
@@ -267,7 +315,13 @@ export function AttendancePunch() {
 
   return (
     <div className="min-h-screen bg-[#f4f6fb] p-4 sm:p-6">
-      <div className={loginMode === 'photo' && step === 'login' ? 'mx-auto max-w-7xl' : 'mx-auto max-w-md'}>
+      <div
+        className={
+          (loginMode === 'photo' && step === 'login') || (isKioskDevice && step === 'home')
+            ? 'mx-auto max-w-5xl'
+            : 'mx-auto max-w-md'
+        }
+      >
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="text-center sm:text-left">
             <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl">Employee punch</h1>
@@ -426,37 +480,99 @@ export function AttendancePunch() {
           </div>
         )}
 
-        {step === 'home' && (
-          <div className="rounded-2xl bg-white p-6 shadow-lg">
-            {isKioskDevice && selectedEmployee?.referencePhotoUrl ? (
-              <div className="mb-4 flex flex-col items-center gap-3">
-                <img
-                  src={selectedEmployee.referencePhotoUrl}
-                  alt={selectedEmployee.fullName}
-                  className="h-28 w-28 rounded-2xl object-cover shadow-md"
-                />
-                <p className="text-xl font-bold text-slate-900">{employeeName}</p>
-              </div>
-            ) : (
-              <p className="text-xl font-semibold text-slate-800">Hello, {employeeName}</p>
-            )}
+        {step === 'home' && isKioskDevice && (
+          <div className="rounded-2xl bg-white p-6 shadow-lg sm:p-8">
+            <div className="grid gap-8 sm:grid-cols-2 sm:items-start">
+              {/* Left: identity, status, GPS, actions */}
+              <div className="flex flex-col">
+                <div className="flex items-center gap-4">
+                  {selectedEmployee?.referencePhotoUrl ? (
+                    <img
+                      src={selectedEmployee.referencePhotoUrl}
+                      alt={selectedEmployee.fullName}
+                      className="h-20 w-20 shrink-0 rounded-2xl object-cover shadow-md sm:h-24 sm:w-24"
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-slate-200 text-2xl font-bold text-slate-500 sm:h-24 sm:w-24">
+                      {employeeName.slice(0, 1)}
+                    </div>
+                  )}
+                  <p className="text-2xl font-bold text-slate-900">{employeeName}</p>
+                </div>
 
-            {isKioskDevice && (
-              <div
-                className={`mb-4 flex items-center justify-center gap-3 rounded-2xl p-4 ${
-                  canPunchOut ? 'bg-emerald-50' : 'bg-slate-100'
-                }`}
-              >
-                {canPunchOut ? (
-                  <FiCheckCircle className="size-9 shrink-0 text-emerald-600" />
-                ) : (
-                  <FiClock className="size-9 shrink-0 text-slate-500" />
+                <div
+                  className={`mt-5 flex items-center justify-center gap-3 rounded-2xl p-4 ${
+                    canPunchOut ? 'bg-emerald-50' : 'bg-slate-100'
+                  }`}
+                >
+                  {canPunchOut ? (
+                    <FiCheckCircle className="size-9 shrink-0 text-emerald-600" />
+                  ) : (
+                    <FiClock className="size-9 shrink-0 text-slate-500" />
+                  )}
+                  <p className={`text-lg font-bold ${canPunchOut ? 'text-emerald-800' : 'text-slate-700'}`}>
+                    {canPunchOut ? "You're currently IN" : "You're currently OUT"}
+                  </p>
+                </div>
+
+                <div className="mt-3">
+                  <GpsStatusBanner coords={coords} maxGpsAccuracyMeters={maxGps} error={geoError} />
+                </div>
+                {(punchContext?.workSites?.length ?? 0) === 0 && (
+                  <p className="mt-2 text-xs text-amber-800">No work sites configured yet. Contact HR.</p>
                 )}
-                <p className={`text-lg font-bold ${canPunchOut ? 'text-emerald-800' : 'text-slate-700'}`}>
-                  {canPunchOut ? "You're currently IN" : "You're currently OUT"}
-                </p>
+
+                <div className="mt-5 grid flex-1 content-end gap-3">
+                  {canPunchIn && (
+                    <Button
+                      fullWidth
+                      variant="success"
+                      className="py-5 text-xl"
+                      disabled={!coords}
+                      loading={loading}
+                      onClick={() => void handleKioskPunch('in')}
+                    >
+                      <FiLogIn className="size-7" /> PUNCH IN
+                    </Button>
+                  )}
+                  {canPunchOut && (
+                    <Button
+                      fullWidth
+                      variant="danger"
+                      className="py-5 text-xl"
+                      disabled={!coords}
+                      loading={loading}
+                      onClick={() => void handleKioskPunch('out')}
+                    >
+                      <FiLogOut className="size-7" /> PUNCH OUT
+                    </Button>
+                  )}
+                  {!canPunchIn && !canPunchOut && (
+                    <p className="text-center text-base text-slate-500">Today&apos;s session is complete.</p>
+                  )}
+                  <Button fullWidth variant="outline" onClick={resetToLogin}>
+                    <FiUser className="size-4" /> Not you? Switch employee
+                  </Button>
+                </div>
               </div>
-            )}
+
+              {/* Right: live camera preview */}
+              <div>
+                <p className="mb-2 text-sm font-semibold text-slate-500">Live camera</p>
+                <SelfieCapture
+                  ref={selfieCaptureRef}
+                  hideButton
+                  onCapture={() => {}}
+                  aspectClassName="aspect-square sm:aspect-[4/5]"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 'home' && !isKioskDevice && (
+          <div className="rounded-2xl bg-white p-6 shadow-lg">
+            <p className="text-xl font-semibold text-slate-800">Hello, {employeeName}</p>
 
             <div className="mt-3">
               <GpsStatusBanner coords={coords} maxGpsAccuracyMeters={maxGps} error={geoError} />
@@ -464,13 +580,11 @@ export function AttendancePunch() {
             {(punchContext?.workSites?.length ?? 0) === 0 && (
               <p className="mt-2 text-xs text-amber-800">No work sites configured yet. Contact HR.</p>
             )}
-            {!isKioskDevice && (
-              <div className="mt-4 rounded-lg bg-slate-50 p-4 text-base">
-                <p>Today: {new Date().toISOString().slice(0, 10)}</p>
-                <p>In: {todayRecord?.punchIn ? new Date(todayRecord.punchIn.at).toLocaleTimeString() : '—'}</p>
-                <p>Out: {todayRecord?.punchOut ? new Date(todayRecord.punchOut.at).toLocaleTimeString() : '—'}</p>
-              </div>
-            )}
+            <div className="mt-4 rounded-lg bg-slate-50 p-4 text-base">
+              <p>Today: {new Date().toISOString().slice(0, 10)}</p>
+              <p>In: {todayRecord?.punchIn ? new Date(todayRecord.punchIn.at).toLocaleTimeString() : '—'}</p>
+              <p>Out: {todayRecord?.punchOut ? new Date(todayRecord.punchOut.at).toLocaleTimeString() : '—'}</p>
+            </div>
             <div className="mt-4 grid gap-3">
               {canPunchIn && (
                 <Button
@@ -500,14 +614,9 @@ export function AttendancePunch() {
                 <p className="text-center text-base text-slate-500">Today&apos;s session is complete.</p>
               )}
             </div>
-            {!locked && !isKioskDevice && (
+            {!locked && (
               <Button fullWidth variant="outline" className="mt-4" onClick={resetToLogin}>
                 Log out
-              </Button>
-            )}
-            {isKioskDevice && (
-              <Button fullWidth variant="outline" className="mt-4" onClick={resetToLogin}>
-                <FiUser className="size-4" /> Not you? Switch employee
               </Button>
             )}
           </div>
@@ -524,35 +633,17 @@ export function AttendancePunch() {
               {action === 'in' ? 'Punching IN' : 'Punching OUT'}
             </div>
             <GeofenceWarningBanner preview={preview} />
-            <SelfieCapture
-              className="mt-4"
-              onCapture={(blob) => {
-                setSelfie(blob);
-                if (isKioskDevice) void submitPunch(blob);
-              }}
-              variant={isKioskDevice ? (action === 'in' ? 'success' : 'danger') : 'primary'}
-              disabled={isKioskDevice && loading}
-              captureLabel={
-                isKioskDevice ? (
-                  <>
-                    {action === 'in' ? <FiLogIn className="size-6" /> : <FiLogOut className="size-6" />}
-                    {loading ? 'Submitting…' : action === 'in' ? 'Tap to punch IN' : 'Tap to punch OUT'}
-                  </>
-                ) : undefined
-              }
-            />
-            {!isKioskDevice && (
-              <Button
-                variant="primary"
-                className="mt-4 w-full py-5 text-xl"
-                disabled={!selfie}
-                loading={loading}
-                onClick={() => void submitPunch()}
-              >
-                {action === 'in' ? <FiLogIn className="size-6" /> : <FiLogOut className="size-6" />}
-                Confirm {action === 'in' ? 'punch in' : 'punch out'}
-              </Button>
-            )}
+            <SelfieCapture className="mt-4" onCapture={setSelfie} />
+            <Button
+              variant="primary"
+              className="mt-4 w-full py-5 text-xl"
+              disabled={!selfie}
+              loading={loading}
+              onClick={() => void submitPunch()}
+            >
+              {action === 'in' ? <FiLogIn className="size-6" /> : <FiLogOut className="size-6" />}
+              Confirm {action === 'in' ? 'punch in' : 'punch out'}
+            </Button>
           </div>
         )}
 
@@ -601,7 +692,11 @@ export function AttendancePunch() {
         title="Outside work site"
         message={preview?.warning ?? 'You are outside the geofence. Continue anyway?'}
         onCancel={() => setConfirmOpen(false)}
-        onConfirm={() => { setConfirmOpen(false); setStep('selfie'); }}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          if (isKioskDevice) void captureAndSubmit(action);
+          else setStep('selfie');
+        }}
       />
     </div>
   );

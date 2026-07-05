@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { FiCamera, FiRefreshCw } from 'react-icons/fi';
 import { Button } from '../Button';
+
+export interface SelfieCaptureHandle {
+  /** Grabs the current live video frame as a JPEG blob (freezes the preview + fires onCapture too). */
+  capture: () => Promise<Blob | null>;
+}
 
 type SelfieCaptureProps = {
   onCapture: (blob: Blob) => void;
@@ -10,15 +15,16 @@ type SelfieCaptureProps = {
   captureLabel?: ReactNode;
   variant?: 'primary' | 'secondary' | 'outline' | 'success' | 'danger';
   disabled?: boolean;
+  /** Hide the internal capture button — use when a parent button drives capture via the ref instead. */
+  hideButton?: boolean;
+  /** Tailwind aspect-ratio class for the video/preview frame (default 4:3). */
+  aspectClassName?: string;
 };
 
-export function SelfieCapture({
-  onCapture,
-  className = '',
-  captureLabel,
-  variant = 'primary',
-  disabled,
-}: SelfieCaptureProps) {
+export const SelfieCapture = forwardRef<SelfieCaptureHandle, SelfieCaptureProps>(function SelfieCapture(
+  { onCapture, className = '', captureLabel, variant = 'primary', disabled, hideButton, aspectClassName = 'aspect-[4/3]' },
+  ref
+) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -52,25 +58,35 @@ export function SelfieCapture({
     };
   }, []);
 
-  const capture = () => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) return;
-        setPreview(URL.createObjectURL(blob));
-        onCapture(blob);
-      },
-      'image/jpeg',
-      0.85
-    );
-  };
+  const captureBlob = useCallback((): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || !video.videoWidth) {
+        resolve(null);
+        return;
+      }
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      ctx.drawImage(video, 0, 0);
+      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.85);
+    });
+  }, []);
+
+  const capture = useCallback(async () => {
+    const blob = await captureBlob();
+    if (!blob) return null;
+    setPreview(URL.createObjectURL(blob));
+    onCapture(blob);
+    return blob;
+  }, [captureBlob, onCapture]);
+
+  useImperativeHandle(ref, () => ({ capture }), [capture]);
 
   return (
     <div className={className}>
@@ -79,20 +95,20 @@ export function SelfieCapture({
       ) : (
         <div className="relative overflow-hidden rounded-xl bg-slate-900">
           {preview ? (
-            <img src={preview} alt="Selfie preview" className="aspect-[4/3] w-full object-cover" />
+            <img src={preview} alt="Selfie preview" className={`${aspectClassName} w-full object-cover`} />
           ) : (
-            <video ref={videoRef} playsInline muted className="aspect-[4/3] w-full object-cover" />
+            <video ref={videoRef} playsInline muted className={`${aspectClassName} w-full object-cover`} />
           )}
           <canvas ref={canvasRef} className="hidden" />
         </div>
       )}
-      {!error && (
+      {!error && !hideButton && (
         <Button
           type="button"
           variant={variant}
           disabled={disabled}
           className="mt-3 w-full py-4 text-lg"
-          onClick={capture}
+          onClick={() => void capture()}
         >
           {preview ? (
             <>
@@ -109,4 +125,4 @@ export function SelfieCapture({
       )}
     </div>
   );
-}
+});
