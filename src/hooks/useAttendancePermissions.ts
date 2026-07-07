@@ -27,6 +27,7 @@ export function useAttendancePermissions() {
     canManageEmployees: !!role && HR_ROLES.has(role),
     canManageSitesShifts: !!role && HR_ROLES.has(role),
     canCorrectRecords: !!role && MANAGER_ROLES.has(role),
+    canManageCorrections: !!role && HR_ROLES.has(role),
     canExport: !!role && MANAGER_ROLES.has(role),
     isManager: role === 'attendance_manager',
     isHr: role === 'attendance_hr' || role === 'admin',
