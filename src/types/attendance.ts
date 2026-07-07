@@ -1,5 +1,5 @@
 export type EmployeeStatus = 'active' | 'inactive';
-export type AttendanceRecordStatus = 'open' | 'complete' | 'flagged';
+export type AttendanceRecordStatus = 'open' | 'complete' | 'flagged' | 'absent';
 export type PunchDeviceType = 'phone' | 'kiosk' | 'crm';
 
 export interface Shift {

@@ -5,6 +5,7 @@ import type {
   AdjustmentType,
   AdjustmentAppliesTo,
   PayComponent,
+  AttendanceCorrection,
   AttendanceDashboard,
   AttendanceRecord,
   AttendanceSettings,
@@ -319,7 +320,7 @@ export function useRecord(id: string | undefined) {
   return useQuery({
     queryKey: ['attendance', 'record', id],
     queryFn: () =>
-      get<{ record: AttendanceRecord; corrections: unknown[] }>(`${BASE}/records/${id}`),
+      get<{ record: AttendanceRecord; corrections: AttendanceCorrection[] }>(`${BASE}/records/${id}`),
     enabled: !!id,
   });
 }
@@ -355,6 +356,62 @@ export function useCorrectSession() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['attendance', 'records'] });
       qc.invalidateQueries({ queryKey: ['attendance', 'record'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'roster'] });
+    },
+  });
+}
+
+export function useDeleteSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, sessionIndex, reason }: { id: string; sessionIndex: number; reason: string }) =>
+      del<AttendanceRecord>(`${BASE}/records/${id}/sessions/${sessionIndex}`, { body: JSON.stringify({ reason }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance', 'records'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'record'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'dashboard'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'roster'] });
+    },
+  });
+}
+
+export function useMarkAbsent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { employeeId: string; workDate: string; reason: string }) =>
+      post<AttendanceRecord>(`${BASE}/records/mark-absent`, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance', 'records'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'record'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'dashboard'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'roster'] });
+    },
+  });
+}
+
+export function useAddSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { employeeId: string; workDate: string; inAt: string; outAt?: string; reason: string }) =>
+      post<AttendanceRecord>(`${BASE}/records/add-session`, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance', 'records'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'record'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'dashboard'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'roster'] });
+    },
+  });
+}
+
+export function useDeleteRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      del<{ message: string }>(`${BASE}/records/${id}`, { body: JSON.stringify({ reason }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance', 'records'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'record'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'dashboard'] });
       qc.invalidateQueries({ queryKey: ['attendance', 'roster'] });
     },
   });
