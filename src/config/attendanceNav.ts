@@ -1,12 +1,9 @@
 import type { IconType } from 'react-icons';
 import {
   FiCalendar,
-  FiCreditCard,
   FiDollarSign,
-  FiEdit3,
   FiGrid,
   FiSettings,
-  FiTablet,
   FiUserCheck,
   FiUsers,
 } from 'react-icons/fi';
@@ -35,23 +32,58 @@ export interface AttendanceNavItem {
   activePaths?: string[];
 }
 
+/**
+ * Five task-based destinations, down from ten data-based ones.
+ *
+ * Each entry lists the routes it absorbed in `activePaths` so those URLs keep the right
+ * sidebar item highlighted while their redirects run. The removed items are not gone —
+ * Quick punch and the punch log are tabs on Today, attendance counts are inline on
+ * People, ID cards is a toolbar action there, and correction approvals surface in
+ * Today's "Needs attention" inbox next to the records they concern.
+ */
 export const ATTENDANCE_NAV_ITEMS: AttendanceNavItem[] = [
   {
     path: '/dashboard/attendance',
-    label: 'Overview',
+    label: 'Today',
     end: true,
     icon: FiGrid,
     permission: 'core',
-    activePaths: ['/dashboard/attendance', '/dashboard/attendance/records'],
+    activePaths: [
+      '/dashboard/attendance',
+      '/dashboard/attendance/records',
+      '/dashboard/attendance/roster',
+      '/dashboard/attendance/regularizations',
+    ],
   },
-  { path: '/dashboard/attendance/roster', label: 'Quick punch', end: false, icon: FiUserCheck, permission: 'roster' },
-  { path: '/dashboard/attendance/employees', label: 'Employees', end: false, icon: FiUsers, permission: 'core' },
-  { path: '/dashboard/attendance/kiosk-devices', label: 'Kiosk devices', end: false, icon: FiTablet, permission: 'kioskDevices' },
-  { path: '/dashboard/attendance/regularizations', label: 'Corrections', end: false, icon: FiEdit3, permission: 'regularizations' },
-  { path: '/dashboard/attendance/id-cards', label: 'ID cards', end: false, icon: FiCreditCard, permission: 'idCards' },
+  {
+    path: '/dashboard/attendance/calendar',
+    label: 'Calendar',
+    end: false,
+    icon: FiCalendar,
+    permission: 'core',
+  },
+  {
+    path: '/dashboard/attendance/employees',
+    label: 'People',
+    end: false,
+    icon: FiUsers,
+    permission: 'core',
+    activePaths: [
+      '/dashboard/attendance/employees',
+      '/dashboard/attendance/summary',
+      '/dashboard/attendance/id-cards',
+    ],
+  },
   { path: '/dashboard/attendance/time-off', label: 'Time off', end: false, icon: FiCalendar, permission: 'timeOff', activePaths: ['/dashboard/attendance/time-off', '/dashboard/attendance/leaves', '/dashboard/attendance/holidays'] },
   { path: '/dashboard/attendance/payroll', label: 'Payroll', end: false, icon: FiDollarSign, permission: 'payrollHub', activePaths: ['/dashboard/attendance/payroll', '/dashboard/attendance/reports'] },
-  { path: '/dashboard/attendance/settings', label: 'Settings', end: false, icon: FiSettings, permission: 'settings' },
+  {
+    path: '/dashboard/attendance/settings',
+    label: 'Settings',
+    end: false,
+    icon: FiSettings,
+    permission: 'settings',
+    activePaths: ['/dashboard/attendance/settings', '/dashboard/attendance/kiosk-devices'],
+  },
 ];
 
 /** Employee self-punch — shown for non-HR roles (any CRM role except admin / HR / manager). */

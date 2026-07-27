@@ -1,16 +1,27 @@
-import { useMemo, useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+  type Dispatch,
+  type HTMLAttributes,
+  type SetStateAction,
+} from 'react';
 import { FiList, FiGrid, FiUpload, FiDownload, FiFile, FiMessageCircle, FiEye, FiTrash2 } from 'react-icons/fi';
 import { useDraftPersister, formatDraftSavedAt } from '../utils/useDraftPersister';
 import {
   DndContext,
+  DragOverlay,
   type DragEndEvent,
+  type DragStartEvent,
   useDraggable,
   useDroppable,
   PointerSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
 import { Button } from '../components/Button';
 import { GstinLookupButton, type GstinLookupResponse } from '../components/GstinLookupButton';
 import { Input } from '../components/Input';
@@ -33,6 +44,7 @@ import {
   useLead,
   useCreateLead,
   useUpdateLead,
+  useUpdateLeadStatus,
   useDeleteLead,
   useAssignableUsers,
   useBulkUploadLeads,
@@ -298,37 +310,44 @@ function assignedToName(lead: Lead) {
   return '—';
 }
 
-function LeadKanbanCard({
+type LeadCardHandlers = {
+  onView: (id: string) => void;
+  onMessage: (l: Lead) => void;
+  onDelete: (l: Lead) => void;
+  canDelete: boolean;
+};
+
+/**
+ * Presentational card. Deliberately free of dnd-kit hooks so it can be memoised:
+ * `useDraggable` subscribes to dnd-kit's internal context, which changes on every
+ * drag start/end and re-renders every mounted draggable. Keeping the expensive
+ * subtree out of that subscription is what makes a 1000+ card board usable.
+ */
+const LeadKanbanCardBody = memo(function LeadKanbanCardBody({
   lead,
   onView,
   onMessage,
   onDelete,
   canDelete,
-}: {
+  dragHandleProps,
+  className = '',
+}: LeadCardHandlers & {
   lead: Lead;
-  onView: (id: string) => void;
-  onMessage: (l: Lead) => void;
-  onDelete: (l: Lead) => void;
-  canDelete: boolean;
+  dragHandleProps?: HTMLAttributes<HTMLDivElement>;
+  className?: string;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: lead._id,
-    data: { lead },
-  });
-  const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
-
+  // `transition-shadow`, never `transition-all`: a blanket transition made the browser
+  // interpolate the drag transform on every pointer move, so the card visibly trailed
+  // the cursor.
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      className={`rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-sm transition-all hover:border-indigo-200/80 hover:shadow-md ${isDragging ? 'z-50 opacity-90 shadow-lg ring-2 ring-indigo-300' : ''}`}
+      className={`rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-sm transition-shadow hover:border-indigo-200/80 hover:shadow-md ${className}`}
     >
       <LeadKanbanMeta lead={lead} />
       <div className="flex items-start justify-between gap-2">
         <div
-          className="min-w-0 flex-1 cursor-grab active:cursor-grabbing"
-          {...listeners}
-          {...attributes}
+          className="min-w-0 flex-1 cursor-grab touch-none active:cursor-grabbing"
+          {...dragHandleProps}
         >
           <p className="truncate text-sm font-semibold text-slate-900">{lead.name}</p>
           <p className="mt-0.5 text-xs text-slate-500">{lead.phone}</p>
@@ -373,6 +392,40 @@ function LeadKanbanCard({
       </div>
     </div>
   );
+});
+
+function LeadKanbanCard({
+  lead,
+  onView,
+  onMessage,
+  onDelete,
+  canDelete,
+}: LeadCardHandlers & { lead: Lead }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: lead._id,
+    data: { lead },
+  });
+
+  // The card itself never moves: DragOverlay renders the follower in a portal, so
+  // per-frame transforms touch one lightweight node instead of reflowing this column.
+  const dragHandleProps = useMemo(
+    () => ({ ...attributes, ...listeners }) as HTMLAttributes<HTMLDivElement>,
+    [attributes, listeners]
+  );
+
+  return (
+    <div ref={setNodeRef}>
+      <LeadKanbanCardBody
+        lead={lead}
+        onView={onView}
+        onMessage={onMessage}
+        onDelete={onDelete}
+        canDelete={canDelete}
+        dragHandleProps={dragHandleProps}
+        className={isDragging ? 'opacity-30' : ''}
+      />
+    </div>
+  );
 }
 
 const LEAD_COLUMN_COLORS: Record<LeadStatus, string> = {
@@ -383,6 +436,9 @@ const LEAD_COLUMN_COLORS: Record<LeadStatus, string> = {
   lost: 'bg-slate-100 border-slate-300',
 };
 
+/** Cards rendered per column before "Show more". Keeps the mounted draggable count low. */
+const KANBAN_COLUMN_CHUNK = 25;
+
 function LeadKanbanColumn({
   status,
   label,
@@ -391,22 +447,22 @@ function LeadKanbanColumn({
   onMessage,
   onDelete,
   canDelete,
-}: {
+}: LeadCardHandlers & {
   status: LeadStatus;
   label: string;
   leads: Lead[];
-  onView: (id: string) => void;
-  onMessage: (l: Lead) => void;
-  onDelete: (l: Lead) => void;
-  canDelete: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const colors = LEAD_COLUMN_COLORS[status] ?? 'bg-slate-50 border-slate-200';
+  const [visibleCount, setVisibleCount] = useState(KANBAN_COLUMN_CHUNK);
+
+  const visible = leads.length > visibleCount ? leads.slice(0, visibleCount) : leads;
+  const remaining = leads.length - visible.length;
 
   return (
     <div
       ref={setNodeRef}
-      className={`min-h-[200px] min-w-[220px] max-w-[300px] shrink-0 rounded-xl border-2 p-3 transition-colors ${colors} ${isOver ? 'ring-2 ring-indigo-400 ring-offset-2' : ''}`}
+      className={`min-h-[200px] min-w-[220px] max-w-[300px] shrink-0 rounded-xl border-2 p-3 ${colors} ${isOver ? 'ring-2 ring-indigo-400 ring-offset-2' : ''}`}
     >
       <h3 className="mb-3 flex items-center justify-between text-sm font-semibold text-slate-700">
         {label}
@@ -415,10 +471,26 @@ function LeadKanbanColumn({
         </span>
       </h3>
       <div className="flex flex-col gap-2">
-        {leads.map((l) => (
-          <LeadKanbanCard key={l._id} lead={l} onView={onView} onMessage={onMessage} onDelete={onDelete} canDelete={canDelete} />
+        {visible.map((l) => (
+          <LeadKanbanCard
+            key={l._id}
+            lead={l}
+            onView={onView}
+            onMessage={onMessage}
+            onDelete={onDelete}
+            canDelete={canDelete}
+          />
         ))}
       </div>
+      {remaining > 0 && (
+        <button
+          type="button"
+          onClick={() => setVisibleCount((c) => c + KANBAN_COLUMN_CHUNK * 2)}
+          className="mt-2 w-full rounded-lg border border-slate-300 bg-white/70 py-1.5 text-xs font-medium text-slate-600 hover:bg-white hover:text-slate-900"
+        >
+          Show {Math.min(remaining, KANBAN_COLUMN_CHUNK * 2)} more ({remaining} hidden)
+        </button>
+      )}
     </div>
   );
 }
@@ -432,45 +504,65 @@ function LeadKanbanBoard({
   onStatusChange,
   isUpdating,
   canDelete,
-}: {
+}: LeadCardHandlers & {
   leads: Lead[];
   isLoading: boolean;
-  onView: (id: string) => void;
-  onMessage: (l: Lead) => void;
-  onDelete: (l: Lead) => void;
   onStatusChange: (params: { id: string; payload: { status: LeadStatus } }) => void;
   isUpdating: boolean;
-  canDelete: boolean;
 }) {
+  const [activeLead, setActiveLead] = useState<Lead | null>(null);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
   );
 
-  const columns = LEAD_STATUS_OPTIONS.map((opt) => ({
-    status: opt.value,
-    label: opt.label,
-    leads: leads.filter((l) => l.status === opt.value),
-  }));
+  // Single pass instead of one filter per status, and stable across unrelated re-renders.
+  const columns = useMemo(() => {
+    const buckets = new Map<LeadStatus, Lead[]>(
+      LEAD_STATUS_OPTIONS.map((opt) => [opt.value, [] as Lead[]])
+    );
+    for (const lead of leads) buckets.get(lead.status)?.push(lead);
+    return LEAD_STATUS_OPTIONS.map((opt) => ({
+      status: opt.value,
+      label: opt.label,
+      leads: buckets.get(opt.value) ?? [],
+    }));
+  }, [leads]);
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || over.id === active.id) return;
-    const lead = active.data.current?.lead as Lead | undefined;
-    if (!lead) return;
-    const newStatus = over.id as LeadStatus;
-    if (LEAD_STATUS_OPTIONS.some((o) => o.value === newStatus) && lead.status !== newStatus) {
-      onStatusChange({ id: lead._id, payload: { status: newStatus } });
-    }
-  }
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveLead((event.active.data.current?.lead as Lead | undefined) ?? null);
+  }, []);
+
+  const handleDragCancel = useCallback(() => setActiveLead(null), []);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveLead(null);
+      const { active, over } = event;
+      if (!over || over.id === active.id) return;
+      const lead = active.data.current?.lead as Lead | undefined;
+      if (!lead) return;
+      const newStatus = over.id as LeadStatus;
+      if (LEAD_STATUS_OPTIONS.some((o) => o.value === newStatus) && lead.status !== newStatus) {
+        onStatusChange({ id: lead._id, payload: { status: newStatus } });
+      }
+    },
+    [onStatusChange]
+  );
 
   if (isLoading) {
     return <p className="py-8 text-center text-slate-500">Loading...</p>;
   }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
       {isUpdating && (
         <div className="mb-3 flex items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 py-2.5 text-sm font-medium text-indigo-700">
           <svg
@@ -500,6 +592,18 @@ function LeadKanbanBoard({
           />
         ))}
       </div>
+      <DragOverlay dropAnimation={null}>
+        {activeLead ? (
+          <LeadKanbanCardBody
+            lead={activeLead}
+            onView={onView}
+            onMessage={onMessage}
+            onDelete={onDelete}
+            canDelete={canDelete}
+            className="h-full cursor-grabbing shadow-lg ring-2 ring-indigo-300"
+          />
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }
@@ -525,6 +629,14 @@ export function LeadManagement() {
 
   const isKanban = viewMode === 'kanban';
   const bulkUploadMutation = useBulkUploadLeads();
+
+  // Stable identities so memoised kanban cards don't re-render on every parent render.
+  const handleKanbanView = useCallback((id: string) => setDetailId(id), []);
+  const handleKanbanMessage = useCallback(
+    (l: Lead) => setMessageTarget({ name: l.name, phone: l.phone }),
+    []
+  );
+  const handleKanbanDelete = useCallback((l: Lead) => setDeleteTarget(l), []);
 
   const handleExport = async (format: 'csv' | 'xlsx') => {
     setExportLoading(format);
@@ -573,7 +685,7 @@ export function LeadManagement() {
   const error = isKanban ? kanbanQuery.error : listQuery.error;
 
   const createMutation = useCreateLead();
-  const updateMutation = useUpdateLead();
+  const statusMutation = useUpdateLeadStatus();
   const deleteMutation = useDeleteLead();
 
   const leads = data?.data ?? [];
@@ -749,11 +861,11 @@ export function LeadManagement() {
             <LeadKanbanBoard
               leads={leads}
               isLoading={isLoading}
-              onView={(id) => setDetailId(id)}
-              onMessage={(l) => setMessageTarget({ name: l.name, phone: l.phone })}
-              onDelete={(l) => setDeleteTarget(l)}
-              onStatusChange={updateMutation.mutate}
-              isUpdating={updateMutation.isPending}
+              onView={handleKanbanView}
+              onMessage={handleKanbanMessage}
+              onDelete={handleKanbanDelete}
+              onStatusChange={statusMutation.mutate}
+              isUpdating={statusMutation.isPending}
               canDelete={isAdmin}
             />
           </>

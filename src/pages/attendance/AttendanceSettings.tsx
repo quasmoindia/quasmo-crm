@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { FiTablet } from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
@@ -11,7 +13,8 @@ import { ShiftsSettingsCard } from '../../components/attendance/ShiftsSettingsCa
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
 
 export function AttendanceSettings() {
-  const { canManageSitesShifts, isAdmin } = useAttendancePermissions();
+  const navigate = useNavigate();
+  const { canManageSitesShifts, isAdmin, canAccessNav } = useAttendancePermissions();
   const { data: settings } = useAttendanceSettings();
   const updateSettings = useUpdateAttendanceSettings();
 
@@ -89,7 +92,14 @@ export function AttendanceSettings() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-800">Attendance settings</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-slate-800">Attendance settings</h1>
+        {canAccessNav('kioskDevices') && (
+          <Button variant="outline" onClick={() => navigate('/dashboard/attendance/kiosk-devices')}>
+            <FiTablet className="size-4" /> Kiosk devices
+          </Button>
+        )}
+      </div>
 
       <Card>
         <h2 className="font-semibold text-slate-800">Policies</h2>

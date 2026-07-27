@@ -25,6 +25,9 @@ import {
 
 const ACCENT = '#C2410C';
 
+/** Stable reference so the duplicate-check effect below doesn't re-fire every render. */
+const NO_ITEMS: IndiaMartLead[] = [];
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -113,7 +116,7 @@ export function IndiaMartLeads() {
 
   const data = fetchMutation.data;
   const isFetching = fetchMutation.isPending;
-  const items = data?.items ?? [];
+  const items = data?.items ?? NO_ITEMS;
 
   const refreshDuplicates = async (rows: IndiaMartLead[]) => {
     if (!rows.length) {

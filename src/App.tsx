@@ -23,8 +23,8 @@ import { AddCustomer } from './pages/AddCustomer';
 import { OrderProcessing } from './pages/OrderProcessing';
 import { AddOrder } from './pages/AddOrder';
 import { DocumentManagement } from './pages/DocumentManagement';
-import { AttendanceOverview } from './pages/attendance/AttendanceOverview';
-import { AttendanceRoster } from './pages/attendance/AttendanceRoster';
+import { AttendanceToday } from './pages/attendance/AttendanceToday';
+import { AttendanceCalendar } from './pages/attendance/AttendanceCalendar';
 import { AttendanceEmployees } from './pages/attendance/AttendanceEmployees';
 import { AttendanceEmployeeForm } from './pages/attendance/AttendanceEmployeeForm';
 import { AttendanceEmployeeDetail } from './pages/attendance/AttendanceEmployeeDetail';
@@ -35,7 +35,6 @@ import { AttendanceSelfPunch } from './pages/attendance/AttendanceSelfPunch';
 import { AttendancePunch } from './pages/attendance/AttendancePunch';
 import { KioskDevices } from './pages/attendance/KioskDevices';
 import { KioskSetup } from './pages/attendance/KioskSetup';
-import { AttendanceRegularizations } from './pages/attendance/AttendanceRegularizations';
 import { IdCards } from './pages/attendance/IdCards';
 
 const queryClient = new QueryClient({
@@ -86,22 +85,32 @@ function App() {
             <Route path="orders" element={<OrderProcessing />} />
             <Route path="orders/new" element={<AddOrder />} />
             <Route path="documents" element={<DocumentManagement />} />
-            <Route path="attendance" element={<AttendanceOverview />} />
-            <Route path="attendance/records" element={<AttendanceOverview />} />
-            <Route path="attendance/roster" element={<AttendanceRoster />} />
+            {/* Six destinations. Everything removed from the sidebar redirects here
+                rather than 404ing, so existing bookmarks keep working. */}
+            <Route path="attendance" element={<AttendanceToday />} />
+            <Route path="attendance/records" element={<Navigate to="/dashboard/attendance?tab=log" replace />} />
+            <Route path="attendance/roster" element={<Navigate to="/dashboard/attendance?tab=punch" replace />} />
+            <Route path="attendance/regularizations" element={<Navigate to="/dashboard/attendance?tab=requests" replace />} />
+
+            <Route path="attendance/calendar" element={<AttendanceCalendar />} />
+
             <Route path="attendance/employees" element={<AttendanceEmployees />} />
             <Route path="attendance/employees/new" element={<AttendanceEmployeeForm />} />
             <Route path="attendance/employees/:id/edit" element={<AttendanceEmployeeForm />} />
             <Route path="attendance/employees/:id" element={<AttendanceEmployeeDetail />} />
+            <Route path="attendance/summary" element={<Navigate to="/dashboard/attendance/employees" replace />} />
+            <Route path="attendance/id-cards" element={<IdCards />} />
+
             <Route path="attendance/time-off" element={<AttendanceTimeOff />} />
             <Route path="attendance/leaves" element={<Navigate to="/dashboard/attendance/time-off?tab=leaves" replace />} />
             <Route path="attendance/holidays" element={<Navigate to="/dashboard/attendance/time-off?tab=holidays" replace />} />
+
             <Route path="attendance/payroll" element={<AttendancePayrollHub />} />
             <Route path="attendance/reports" element={<Navigate to="/dashboard/attendance/payroll?tab=reports" replace />} />
+
             <Route path="attendance/settings" element={<AttendanceSettings />} />
             <Route path="attendance/kiosk-devices" element={<KioskDevices />} />
-            <Route path="attendance/regularizations" element={<AttendanceRegularizations />} />
-            <Route path="attendance/id-cards" element={<IdCards />} />
+
             <Route path="attendance/my-punch" element={<AttendanceSelfPunch />} />
             {/* Sales / Finance / Content – commented for now
             <Route path="sales" element={<PlaceholderModule title="Sales management" />} />
