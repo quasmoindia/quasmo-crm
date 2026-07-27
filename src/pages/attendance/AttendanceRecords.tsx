@@ -347,8 +347,8 @@ function SessionsModal({
     await correctSession.mutateAsync({
       id: record._id,
       sessionIndex: editIndex,
-      inAt: inAt ? fromLocalInput(inAt) : undefined,
-      outAt: outAt ? fromLocalInput(outAt) : undefined,
+      in: inAt ? { at: fromLocalInput(inAt) } : undefined,
+      out: outAt ? { at: fromLocalInput(outAt) } : undefined,
       reason: reason.trim(),
     });
     setEditIndex(null);

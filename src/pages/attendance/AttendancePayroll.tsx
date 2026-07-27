@@ -30,9 +30,9 @@ import type {
   AdjustmentAppliesTo,
   AdjustmentType,
   PayComponent,
-  PayrollDayDetail,
   PayrollRow,
 } from '../../types/attendance';
+import { DAY_TYPE_META } from '../../components/attendance/dayTypeMeta';
 
 function hoursLabel(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -286,17 +286,6 @@ export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) 
     </div>
   );
 }
-
-const DAY_TYPE_META: Record<PayrollDayDetail['type'], { label: string; cls: string }> = {
-  worked: { label: 'Worked', cls: 'bg-emerald-100 text-emerald-800' },
-  paid_holiday: { label: 'Paid holiday', cls: 'bg-violet-100 text-violet-800' },
-  unpaid_holiday: { label: 'Holiday (unpaid)', cls: 'bg-slate-100 text-slate-600' },
-  paid_leave: { label: 'Paid leave', cls: 'bg-sky-100 text-sky-800' },
-  unpaid_leave: { label: 'Unpaid leave', cls: 'bg-slate-200 text-slate-700' },
-  week_off: { label: 'Weekly off (paid)', cls: 'bg-indigo-100 text-indigo-800' },
-  week_off_unpaid: { label: 'Weekly off', cls: 'bg-slate-100 text-slate-600' },
-  absent: { label: 'Absent', cls: 'bg-rose-100 text-rose-700' },
-};
 
 function mins(m: number) {
   const h = Math.floor(m / 60);

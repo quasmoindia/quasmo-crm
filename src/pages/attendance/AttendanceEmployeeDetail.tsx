@@ -5,6 +5,7 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { DataTable } from '../../components/DataTable';
 import { AttendanceStatusBadge } from '../../components/attendance/AttendanceStatusBadge';
+import { EmployeeAttendanceSection } from '../../components/attendance/EmployeeAttendanceSection';
 import { useDeleteEmployee, useEmployee, useRecordsList } from '../../api/attendance';
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
 import type { AttendanceRecord } from '../../types/attendance';
@@ -130,6 +131,8 @@ export function AttendanceEmployeeDetail() {
           </dl>
         </Card>
       )}
+      {id && <EmployeeAttendanceSection employeeId={id} employeeName={employee.fullName} />}
+
       <Card>
         <h2 className="mb-4 font-semibold text-slate-800">Recent attendance</h2>
         <DataTable<AttendanceRecord>

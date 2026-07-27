@@ -32,6 +32,10 @@ import type {
   SelfPunchContext,
   Shift,
   WorkSite,
+  AttendanceSummaryResponse,
+  EmployeeAttendanceSummary,
+  AttendanceCalendarResponse,
+  AttendanceDayResponse,
 } from '../types/attendance';
 
 const BASE = '/attendance';
@@ -337,26 +341,39 @@ export function useCorrectRecord() {
   });
 }
 
+/** Fields of one punch that HR may correct. Omitted fields are left untouched. */
+export interface PunchPatch {
+  at?: string;
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
+  outsideGeofence?: boolean;
+}
+
 export function useCorrectSession() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
       id,
       sessionIndex,
-      inAt,
-      outAt,
+      in: inPatch,
+      out: outPatch,
       reason,
     }: {
       id: string;
       sessionIndex: number;
-      inAt?: string;
-      outAt?: string;
+      in?: PunchPatch;
+      out?: PunchPatch;
       reason: string;
-    }) => patch<AttendanceRecord>(`${BASE}/records/${id}/session`, { sessionIndex, inAt, outAt, reason }),
+    }) =>
+      patch<AttendanceRecord>(`${BASE}/records/${id}/session`, {
+        sessionIndex,
+        in: inPatch,
+        out: outPatch,
+        reason,
+      }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['attendance', 'records'] });
-      qc.invalidateQueries({ queryKey: ['attendance', 'record'] });
-      qc.invalidateQueries({ queryKey: ['attendance', 'roster'] });
+      qc.invalidateQueries({ queryKey: ['attendance'] });
     },
   });
 }
@@ -448,6 +465,67 @@ export function usePayrollEmployeeDetail(
     queryFn: () =>
       get<PayrollEmployeeDetail>(`${BASE}/reports/payroll/employee/${employeeId}`, {
         params: queryParams,
+      }),
+    enabled: !!employeeId,
+  });
+}
+
+/** Present/absent/week-off/holiday counts for every employee in a date range. */
+export function useAttendanceSummary(params: { dateFrom: string; dateTo: string; department?: string }) {
+  const queryParams: Record<string, string> = {
+    dateFrom: params.dateFrom,
+    dateTo: params.dateTo,
+  };
+  if (params.department) queryParams.department = params.department;
+  return useQuery({
+    queryKey: ['attendance', 'attendance-summary', params],
+    queryFn: () => get<AttendanceSummaryResponse>(`${BASE}/reports/attendance-summary`, { params: queryParams }),
+  });
+}
+
+/** Download one day's per-employee attendance as CSV. */
+export async function exportAttendanceDayApi(date: string, department?: string): Promise<Blob> {
+  const token = localStorage.getItem('token');
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const qs = new URLSearchParams({ date });
+  if (department) qs.set('department', department);
+  const url = `${base}/${BASE.replace(/^\//, '')}/reports/day/export?${qs.toString()}`;
+  const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error('Export failed');
+  return res.blob();
+}
+
+/** Company-wide totals per calendar day, for the month heatmap. */
+export function useAttendanceCalendar(params: { dateFrom: string; dateTo: string; department?: string }) {
+  const queryParams: Record<string, string> = { dateFrom: params.dateFrom, dateTo: params.dateTo };
+  if (params.department) queryParams.department = params.department;
+  return useQuery({
+    queryKey: ['attendance', 'calendar', params],
+    queryFn: () => get<AttendanceCalendarResponse>(`${BASE}/reports/calendar`, { params: queryParams }),
+  });
+}
+
+/** Every employee's status on one date. */
+export function useAttendanceDay(date: string | null, params?: { department?: string }) {
+  const queryParams: Record<string, string> = { date: date ?? '' };
+  if (params?.department) queryParams.department = params.department;
+  return useQuery({
+    queryKey: ['attendance', 'day', date, params],
+    queryFn: () => get<AttendanceDayResponse>(`${BASE}/reports/day`, { params: queryParams }),
+    enabled: !!date,
+  });
+}
+
+/** Day-by-day attendance for one employee, including punch sessions and selfies. */
+export function useEmployeeAttendanceSummary(
+  employeeId: string | null | undefined,
+  params: { dateFrom: string; dateTo: string }
+) {
+  return useQuery({
+    queryKey: ['attendance', 'employee-attendance-summary', employeeId, params],
+    queryFn: () =>
+      get<EmployeeAttendanceSummary>(`${BASE}/employees/${employeeId}/attendance-summary`, {
+        params: { dateFrom: params.dateFrom, dateTo: params.dateTo },
       }),
     enabled: !!employeeId,
   });

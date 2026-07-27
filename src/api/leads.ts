@@ -278,6 +278,39 @@ export function useAddLeadDocument(leadId: string) {
   });
 }
 
+/**
+ * Kanban drag-and-drop status change. Patches the cached lists optimistically so the
+ * card lands instantly instead of waiting on a round trip plus a full board refetch.
+ */
+export function useUpdateLeadStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { status: LeadStatus } }) =>
+      updateLeadApi(id, payload),
+    onMutate: async ({ id, payload }) => {
+      await queryClient.cancelQueries({ queryKey: leadsQueryKey });
+      const snapshot = queryClient.getQueriesData<LeadsListResponse>({ queryKey: leadsQueryKey });
+      for (const [key, prev] of snapshot) {
+        // The `leads` prefix also matches single-lead and user queries — skip those.
+        if (!Array.isArray(prev?.data)) continue;
+        queryClient.setQueryData<LeadsListResponse>(key, {
+          ...prev,
+          data: prev.data.map((l) => (l._id === id ? { ...l, status: payload.status } : l)),
+        });
+      }
+      return { snapshot };
+    },
+    onError: (_err, _vars, context) => {
+      for (const [key, prev] of context?.snapshot ?? []) {
+        queryClient.setQueryData(key, prev);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: leadsQueryKey });
+    },
+  });
+}
+
 export function useDeleteLead() {
   const queryClient = useQueryClient();
   return useMutation({

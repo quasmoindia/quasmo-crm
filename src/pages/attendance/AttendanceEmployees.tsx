@@ -1,10 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiPlus, FiUpload, FiUsers, FiUserCheck } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight, FiCreditCard, FiPlus, FiUpload, FiUsers, FiUserCheck } from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { DataTable } from '../../components/DataTable';
-import { useDeleteEmployee, useEmployeesList, useImportEmployees } from '../../api/attendance';
+import {
+  useAttendanceSummary,
+  useDeleteEmployee,
+  useEmployeesList,
+  useImportEmployees,
+} from '../../api/attendance';
+import { currentMonth, monthLabel, monthRange, shiftMonth } from '../../components/attendance/monthUtils';
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
 import type { Employee } from '../../types/attendance';
 
@@ -46,7 +52,15 @@ function StatusBadge({ status }: { status: Employee['status'] }) {
 
 export function AttendanceEmployees() {
   const navigate = useNavigate();
-  const { canManageEmployees, isAdmin } = useAttendancePermissions();
+  const { canManageEmployees, isAdmin, canAccessNav } = useAttendancePermissions();
+  const [month, setMonth] = useState(currentMonth());
+  const { data: summary } = useAttendanceSummary(monthRange(month));
+
+  // Counts are shown inline here so nobody needs a separate "attendance summary" page.
+  const countsByEmployee = useMemo(
+    () => new Map((summary?.rows ?? []).map((r) => [r.employeeId, r])),
+    [summary]
+  );
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,19 +102,49 @@ export function AttendanceEmployees() {
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Employees</h1>
-          <p className="mt-1 text-sm text-slate-500">Manage your team, link app users, and keep reference photos up to date.</p>
+          <h1 className="text-2xl font-bold text-slate-800">People</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Your team and this month&apos;s attendance. Click anyone to see their calendar and fix a day.
+          </p>
         </div>
-        {canManageEmployees && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleCsvImport} loading={importMutation.isPending}>
-              <FiUpload className="size-4" /> Import CSV
-            </Button>
-            <Button onClick={() => navigate('/dashboard/attendance/employees/new')}>
-              <FiPlus className="size-4" /> Add employee
-            </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="mr-2 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setMonth(shiftMonth(month, -1))}
+              className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
+              aria-label="Previous month"
+            >
+              <FiChevronLeft className="size-4" />
+            </button>
+            <span className="min-w-[8rem] text-center text-sm font-semibold text-slate-800">
+              {monthLabel(month)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setMonth(shiftMonth(month, 1))}
+              className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
+              aria-label="Next month"
+            >
+              <FiChevronRight className="size-4" />
+            </button>
           </div>
-        )}
+          {canAccessNav('idCards') && (
+            <Button variant="outline" onClick={() => navigate('/dashboard/attendance/id-cards')}>
+              <FiCreditCard className="size-4" /> ID cards
+            </Button>
+          )}
+          {canManageEmployees && (
+            <>
+              <Button variant="outline" onClick={handleCsvImport} loading={importMutation.isPending}>
+                <FiUpload className="size-4" /> Import CSV
+              </Button>
+              <Button onClick={() => navigate('/dashboard/attendance/employees/new')}>
+                <FiPlus className="size-4" /> Add employee
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -140,8 +184,33 @@ export function AttendanceEmployees() {
                 </div>
               ),
             },
-            { key: 'phone', label: 'Phone', render: (employee) => employee.phone ?? '—' },
             { key: 'dept', label: 'Department', render: (employee) => employee.department ?? '—' },
+            {
+              key: 'attendance',
+              label: `${monthLabel(month)} attendance`,
+              render: (employee) => {
+                const c = countsByEmployee.get(employee._id);
+                if (!c) return <span className="text-sm text-slate-400">—</span>;
+                return (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="font-medium text-emerald-700" title="Present">{c.presentDays}P</span>
+                    <span className={c.absentDays > 0 ? 'font-medium text-rose-700' : 'text-slate-400'} title="Absent">
+                      {c.absentDays}A
+                    </span>
+                    <span className="text-indigo-600" title="Week off">{c.weekOffDays}W</span>
+                    <span className="text-violet-600" title="Holiday">{c.holidayDays}H</span>
+                    {c.incompleteDays > 0 && (
+                      <span
+                        className="rounded-full bg-amber-100 px-1.5 text-[11px] font-medium text-amber-800"
+                        title={`${c.incompleteDays} day(s) with no punch-out`}
+                      >
+                        {c.incompleteDays}!
+                      </span>
+                    )}
+                  </div>
+                );
+              },
+            },
             {
               key: 'app',
               label: 'App login',

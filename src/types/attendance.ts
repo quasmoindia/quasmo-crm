@@ -413,10 +413,134 @@ export interface PayrollAdjustment {
   createdAt: string;
 }
 
+/**
+ * How a single day is classified. Mirrors DayType in the backend's
+ * attendanceSummaryService — keep the two in step. Adding a case here without
+ * handling it in DAY_TYPE_META is a compile error, which is the point.
+ */
+export type DayType =
+  | 'worked'
+  | 'worked_open'
+  | 'paid_holiday'
+  | 'unpaid_holiday'
+  | 'paid_leave'
+  | 'unpaid_leave'
+  | 'week_off'
+  | 'week_off_unpaid'
+  | 'absent';
+
+export interface AttendanceCounts {
+  presentDays: number;
+  incompleteDays: number;
+  absentDays: number;
+  weekOffDays: number;
+  holidayDays: number;
+  paidLeaveDays: number;
+  unpaidLeaveDays: number;
+  totalDays: number;
+  workedMinutes: number;
+}
+
+export interface AttendanceSummaryRow extends AttendanceCounts {
+  employeeId: string;
+  employeeCode: string;
+  fullName: string;
+  department: string;
+}
+
+export interface AttendanceSummaryResponse {
+  dateFrom: string;
+  dateTo: string;
+  rows: AttendanceSummaryRow[];
+  totals: AttendanceCounts;
+}
+
+export interface AttendancePunchDetail {
+  at: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  selfieUrl: string;
+  outsideGeofence: boolean;
+  deviceType: 'phone' | 'kiosk' | 'crm';
+}
+
+export interface AttendanceSessionDetail {
+  in: AttendancePunchDetail;
+  out: AttendancePunchDetail | null;
+  durationMinutes: number | null;
+}
+
+export interface AttendanceDayDetail {
+  date: string;
+  day: string;
+  type: DayType;
+  workedMinutes: number;
+  note?: string;
+  recordId: string | null;
+  recordStatus: string | null;
+  lateMinutes: number;
+  workSite: string | null;
+  sessions: AttendanceSessionDetail[];
+}
+
+export interface EmployeeAttendanceSummary {
+  employee: { _id: string; fullName: string; employeeCode: string; department: string };
+  dateFrom: string;
+  dateTo: string;
+  counts: AttendanceCounts;
+  days: AttendanceDayDetail[];
+}
+
+/** One calendar cell: company-wide totals for a single date. */
+export interface CalendarDayAggregate {
+  date: string;
+  day: string;
+  present: number;
+  incomplete: number;
+  absent: number;
+  weekOff: number;
+  holiday: number;
+  leave: number;
+  late: number;
+  flagged: number;
+  expected: number;
+  attendanceRate: number | null;
+  holidayName: string | null;
+}
+
+export interface AttendanceCalendarResponse {
+  dateFrom: string;
+  dateTo: string;
+  employeeCount: number;
+  days: CalendarDayAggregate[];
+}
+
+export interface AttendanceDayEmployee {
+  employeeId: string;
+  employeeCode: string;
+  fullName: string;
+  department: string;
+  type: DayType;
+  note: string | null;
+  workedMinutes: number;
+  lateMinutes: number;
+  recordStatus: string | null;
+  firstIn: string | null;
+  lastOut: string | null;
+  outsideGeofence: boolean;
+}
+
+export interface AttendanceDayResponse {
+  date: string;
+  counts: AttendanceCounts & { lateCount: number; flaggedCount: number };
+  employees: AttendanceDayEmployee[];
+}
+
 export interface PayrollDayDetail {
   date: string;
   day: string;
-  type: 'worked' | 'paid_holiday' | 'unpaid_holiday' | 'paid_leave' | 'unpaid_leave' | 'week_off' | 'week_off_unpaid' | 'absent';
+  type: DayType;
   workedMinutes: number;
   regularMinutes: number;
   otMinutes: number;
@@ -453,6 +577,7 @@ export interface PayrollEmployeeDetail {
     weekOffDays: number;
     holidayDays: number;
     absentDays: number;
+    incompleteDays?: number;
     regularMinutes: number;
     overtimeMinutes: number;
     regularAmount: number;
