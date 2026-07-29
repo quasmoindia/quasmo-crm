@@ -25,6 +25,8 @@ import { AddOrder } from './pages/AddOrder';
 import { DocumentManagement } from './pages/DocumentManagement';
 import { AttendanceToday } from './pages/attendance/AttendanceToday';
 import { AttendanceCalendar } from './pages/attendance/AttendanceCalendar';
+import { FaceKioskLab } from './pages/attendance/FaceKioskLab';
+import { FaceEnrollment } from './pages/attendance/FaceEnrollment';
 import { AttendanceEmployees } from './pages/attendance/AttendanceEmployees';
 import { AttendanceEmployeeForm } from './pages/attendance/AttendanceEmployeeForm';
 import { AttendanceEmployeeDetail } from './pages/attendance/AttendanceEmployeeDetail';
@@ -110,6 +112,8 @@ function App() {
 
             <Route path="attendance/settings" element={<AttendanceSettings />} />
             <Route path="attendance/kiosk-devices" element={<KioskDevices />} />
+            <Route path="attendance/face-kiosk" element={<FaceKioskLab />} />
+            <Route path="attendance/face-enrollment" element={<FaceEnrollment />} />
 
             <Route path="attendance/my-punch" element={<AttendanceSelfPunch />} />
             {/* Sales / Finance / Content – commented for now

@@ -14,6 +14,7 @@ import type {
   KioskDevice,
   KioskDeviceCreateResult,
   KioskDirectory,
+  KioskDeviceMode,
   PunchDirectory,
   CreateEmployeePayload,
   Employee,
@@ -36,6 +37,9 @@ import type {
   EmployeeAttendanceSummary,
   AttendanceCalendarResponse,
   AttendanceDayResponse,
+  FaceGalleryResponse,
+  FaceGalleryEntry,
+  FaceEnrollmentResponse,
 } from '../types/attendance';
 
 const BASE = '/attendance';
@@ -495,6 +499,91 @@ export async function exportAttendanceDayApi(date: string, department?: string):
   return res.blob();
 }
 
+// ─── Face recognition ────────────────────────────────────────────────────────
+
+export interface KioskFaceGallery {
+  enabled: boolean;
+  entries: FaceGalleryEntry[];
+  config: {
+    matchThreshold: number;
+    marginThreshold: number;
+    antiSpoofMode: 'off' | 'record' | 'block';
+    antiSpoofThreshold: number;
+    livenessThreshold: number;
+  } | null;
+}
+
+/**
+ * Face gallery for a paired kiosk, authenticated by device token and scoped to that
+ * device's site. Thresholds travel with it so they can be retuned centrally without
+ * redeploying the kiosks.
+ */
+export function useKioskFaceGallery(enabled: boolean) {
+  return useQuery({
+    queryKey: ['attendance', 'kiosk-face-gallery'],
+    queryFn: () => kioskFetch<KioskFaceGallery>('face-gallery'),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+
+/** Enrolled face vectors for matching. Only fetched by pages that actually match. */
+export function useFaceGallery(params?: { workSiteId?: string; enabled?: boolean }) {
+  const queryParams: Record<string, string> = {};
+  if (params?.workSiteId) queryParams.workSiteId = params.workSiteId;
+  return useQuery({
+    queryKey: ['attendance', 'face-gallery', params?.workSiteId ?? null],
+    queryFn: () => get<FaceGalleryResponse>(`${BASE}/face/gallery`, { params: queryParams }),
+    enabled: params?.enabled ?? true,
+    // Vectors change only on enrolment, and the payload is large.
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Who is enrolled and how many samples they have — no vectors in the payload. */
+export function useFaceEnrollment() {
+  return useQuery({
+    queryKey: ['attendance', 'face-enrollment'],
+    queryFn: () => get<FaceEnrollmentResponse>(`${BASE}/face/enrollment`),
+  });
+}
+
+export function useAddFaceSamples() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      employeeId,
+      vectors,
+      source,
+    }: {
+      employeeId: string;
+      vectors: number[][];
+      source: 'photo' | 'live';
+    }) =>
+      post<{ employeeId: string; sampleCount: number; added: number; dropped: number }>(
+        `${BASE}/face/employees/${employeeId}/samples`,
+        { vectors, source }
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance', 'face-enrollment'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'face-gallery'] });
+    },
+  });
+}
+
+export function useClearFaceSamples() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (employeeId: string) =>
+      del<{ employeeId: string; sampleCount: number }>(`${BASE}/face/employees/${employeeId}/samples`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance', 'face-enrollment'] });
+      qc.invalidateQueries({ queryKey: ['attendance', 'face-gallery'] });
+    },
+  });
+}
+
 /** Company-wide totals per calendar day, for the month heatmap. */
 export function useAttendanceCalendar(params: { dateFrom: string; dateTo: string; department?: string }) {
   const queryParams: Record<string, string> = { dateFrom: params.dateFrom, dateTo: params.dateTo };
@@ -744,6 +833,8 @@ function buildPunchForm(payload: {
   accuracy: number;
   selfie: Blob;
   clientTimestamp?: string;
+  /** Present when a kiosk identified this person by face; stored for audit. */
+  faceMatch?: { similarity: number; margin: number; real?: number; live?: number };
 }) {
   const form = new FormData();
   form.append('latitude', String(payload.latitude));
@@ -751,6 +842,7 @@ function buildPunchForm(payload: {
   form.append('accuracy', String(payload.accuracy));
   form.append('selfie', payload.selfie, 'selfie.jpg');
   if (payload.employeeId) form.append('employeeId', payload.employeeId);
+  if (payload.faceMatch) form.append('faceMatch', JSON.stringify(payload.faceMatch));
   form.append('clientTimestamp', payload.clientTimestamp ?? new Date().toISOString());
   return form;
 }
@@ -1062,6 +1154,7 @@ export async function kioskPunchInApi(payload: {
   accuracy: number;
   selfie: Blob;
   clientTimestamp?: string;
+  faceMatch?: { similarity: number; margin: number; real?: number; live?: number };
 }) {
   const form = buildPunchForm(payload);
   return kioskFetch<{ record: AttendanceRecord; preview: GeofencePreview }>('punch/in', {
@@ -1072,6 +1165,7 @@ export async function kioskPunchInApi(payload: {
 
 export async function kioskPunchOutApi(payload: {
   employeeId: string;
+  faceMatch?: { similarity: number; margin: number; real?: number; live?: number };
   latitude: number;
   longitude: number;
   accuracy: number;
@@ -1097,7 +1191,7 @@ export function useKioskDevices() {
 export function useCreateKioskDevice() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { name: string; workSiteId: string }) =>
+    mutationFn: (payload: { name: string; workSiteId: string; mode?: KioskDeviceMode }) =>
       post<KioskDeviceCreateResult>(`${BASE}/kiosk-devices`, payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'kiosk-devices'] }),
   });
@@ -1106,8 +1200,21 @@ export function useCreateKioskDevice() {
 export function useUpdateKioskDevice() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: { name?: string; workSiteId?: string } }) =>
-      patch<{ device: KioskDevice }>(`${BASE}/kiosk-devices/${id}`, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: { name?: string; workSiteId?: string; mode?: KioskDeviceMode };
+    }) => patch<{ device: KioskDevice }>(`${BASE}/kiosk-devices/${id}`, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'kiosk-devices'] }),
+  });
+}
+
+export function useDeleteKioskDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => del<{ message: string }>(`${BASE}/kiosk-devices/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance', 'kiosk-devices'] }),
   });
 }
