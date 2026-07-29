@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FiAlertTriangle, FiMapPin, FiMonitor, FiSmartphone, FiTablet, FiUser, FiX } from 'react-icons/fi';
+import { FiAlertTriangle, FiMapPin, FiMonitor, FiSmartphone, FiTablet, FiUser, FiUserCheck, FiX } from 'react-icons/fi';
 import type { AttendancePunchDetail, AttendanceSessionDetail } from '../../types/attendance';
 import { formatMinutes } from './dayTypeMeta';
 
@@ -78,12 +78,38 @@ function PunchCard({
         {punch.latitude.toFixed(5)}, {punch.longitude.toFixed(5)} · ±{Math.round(punch.accuracy)}m
       </a>
 
-      {punch.outsideGeofence && (
-        <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-          <FiAlertTriangle className="size-3" aria-hidden />
-          Outside geofence
-        </span>
-      )}
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {punch.outsideGeofence && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+            <FiAlertTriangle className="size-3" aria-hidden />
+            Outside geofence
+          </span>
+        )}
+        {punch.siteMismatch && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-800"
+            title="Punched at a kiosk belonging to a different work site than this employee is assigned to"
+          >
+            <FiMapPin className="size-3" aria-hidden />
+            Different site
+          </span>
+        )}
+        {punch.faceMatch && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-medium text-teal-800"
+            title={
+              `Identified by face at ${(punch.faceMatch.similarity * 100).toFixed(1)}% similarity` +
+              `, ${(punch.faceMatch.margin * 100).toFixed(1)}% clear of the next candidate` +
+              (punch.faceMatch.real != null
+                ? `. Anti-spoof ${(punch.faceMatch.real * 100).toFixed(0)}%`
+                : '')
+            }
+          >
+            <FiUserCheck className="size-3" aria-hidden />
+            Face matched {(punch.faceMatch.similarity * 100).toFixed(0)}%
+          </span>
+        )}
+      </div>
     </div>
   );
 }

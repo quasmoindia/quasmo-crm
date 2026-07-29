@@ -165,6 +165,12 @@ export interface AttendanceSettings {
   ptAmount: number;
   weeklyOffDays: number[];
   paidWeeklyOff: boolean;
+  faceRecognitionEnabled?: boolean;
+  faceMatchThreshold?: number;
+  faceMarginThreshold?: number;
+  faceAntiSpoofMode?: 'off' | 'record' | 'block';
+  faceAntiSpoofThreshold?: number;
+  faceLivenessThreshold?: number;
 }
 
 export interface AttendanceDashboardHoliday {
@@ -201,6 +207,8 @@ export interface GeofencePreview {
   workSiteName?: string;
   allowOutsideGeofence?: boolean;
   maxGpsAccuracyMeters?: number;
+  /** Employee is assigned to a different site than this kiosk. Warned, not blocked. */
+  siteMismatch?: boolean;
 }
 
 export interface PunchResult {
@@ -252,15 +260,20 @@ export interface KioskDirectoryEntry extends PunchDirectoryEntry {
   today: KioskTodayStatus;
 }
 
+export type KioskDeviceMode = 'simple' | 'face';
+
 export interface KioskDirectory {
   workDate: string;
   siteFiltered: boolean;
+  /** Which kiosk experience this paired device runs. */
+  deviceMode?: KioskDeviceMode;
   data: KioskDirectoryEntry[];
 }
 
 export interface KioskDevice {
   _id: string;
   name: string;
+  mode?: KioskDeviceMode;
   workSiteId: WorkSite | string;
   isActive: boolean;
   lastUsedAt?: string | null;
@@ -457,6 +470,9 @@ export interface AttendanceSummaryResponse {
 
 export interface AttendancePunchDetail {
   at: string;
+  /** Present when a kiosk identified this person by face rather than by tap. */
+  faceMatch?: { similarity: number; margin: number; real?: number; live?: number };
+  siteMismatch?: boolean;
   latitude: number;
   longitude: number;
   accuracy: number;
@@ -490,6 +506,37 @@ export interface EmployeeAttendanceSummary {
   dateTo: string;
   counts: AttendanceCounts;
   days: AttendanceDayDetail[];
+}
+
+export interface FaceGalleryEntry {
+  employeeId: string;
+  fullName: string;
+  employeeCode: string;
+  department: string;
+  referencePhotoUrl: string;
+  descriptors: number[][];
+}
+
+export interface FaceGalleryResponse {
+  embeddingLength: number;
+  enrolled: number;
+  totalInScope: number;
+  entries: FaceGalleryEntry[];
+}
+
+export interface FaceEnrollmentRow {
+  employeeId: string;
+  fullName: string;
+  employeeCode: string;
+  department: string;
+  referencePhotoUrl: string;
+  sampleCount: number;
+  sources: ('photo' | 'live')[];
+}
+
+export interface FaceEnrollmentResponse {
+  maxSamples: number;
+  data: FaceEnrollmentRow[];
 }
 
 /** One calendar cell: company-wide totals for a single date. */

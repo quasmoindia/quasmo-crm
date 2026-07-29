@@ -1,26 +1,38 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiChevronLeft, FiChevronRight, FiCreditCard, FiPlus, FiUpload, FiUsers, FiUserCheck } from 'react-icons/fi';
+import {
+  FiCamera,
+  FiChevronLeft,
+  FiChevronRight,
+  FiCreditCard,
+  FiEdit2,
+  FiEye,
+  FiPlus,
+  FiTrash2,
+  FiUpload,
+} from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { DataTable } from '../../components/DataTable';
+import { TableRowActions } from '../../components/TableRowActions';
 import {
   useAttendanceSummary,
   useDeleteEmployee,
   useEmployeesList,
+  useFaceEnrollment,
   useImportEmployees,
 } from '../../api/attendance';
 import { currentMonth, monthLabel, monthRange, shiftMonth } from '../../components/attendance/monthUtils';
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
-import type { Employee } from '../../types/attendance';
+import type { AttendanceCounts, Employee } from '../../types/attendance';
 
 function EmployeeAvatar({ employee }: { employee: Employee }) {
   if (employee.referencePhotoUrl) {
     return (
       <img
         src={employee.referencePhotoUrl}
-        alt={employee.fullName}
-        className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-white"
+        alt=""
+        className="size-10 shrink-0 rounded-full object-cover ring-2 ring-white"
       />
     );
   }
@@ -31,48 +43,90 @@ function EmployeeAvatar({ employee }: { employee: Employee }) {
     .map((part) => part[0]?.toUpperCase())
     .join('');
   return (
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-50 text-xs font-bold text-teal-700 ring-2 ring-white">
+    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500 ring-2 ring-white">
       {initials || 'E'}
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: Employee['status'] }) {
-  const active = status === 'active';
+/**
+ * Attendance as a proportion, not a code.
+ *
+ * The previous "5P 22A 4W 0H" needed a legend nobody had, and buried the one number
+ * that matters — how much of the month this person actually worked. The bar makes a bad
+ * month visible before you read any digits.
+ */
+function AttendanceBar({ counts }: { counts: AttendanceCounts | undefined }) {
+  if (!counts || counts.totalDays === 0) {
+    return <span className="text-sm text-slate-300">No data</span>;
+  }
+
+  const { presentDays, absentDays, weekOffDays, holidayDays } = counts;
+  const leaveDays = counts.paidLeaveDays + counts.unpaidLeaveDays;
+  const total = Math.max(1, counts.totalDays);
+  const pct = (n: number) => `${(n / total) * 100}%`;
+
   return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-        active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
-      }`}
-    >
-      {active ? 'Active' : 'Inactive'}
-    </span>
+    <div className="min-w-[10rem]">
+      <div className="flex h-1.5 overflow-hidden rounded-full bg-slate-100" aria-hidden>
+        <span className="bg-emerald-500" style={{ width: pct(presentDays) }} />
+        <span className="bg-rose-400" style={{ width: pct(absentDays) }} />
+        <span className="bg-sky-300" style={{ width: pct(leaveDays) }} />
+        <span className="bg-violet-300" style={{ width: pct(holidayDays) }} />
+        <span className="bg-slate-200" style={{ width: pct(weekOffDays) }} />
+      </div>
+      <p className="mt-1.5 text-sm">
+        <span className="font-semibold text-slate-800">{presentDays}</span>
+        <span className="text-slate-500"> present</span>
+        {absentDays > 0 && (
+          <>
+            <span className="text-slate-300"> · </span>
+            <span className="font-semibold text-rose-600">{absentDays}</span>
+            <span className="text-rose-500"> absent</span>
+          </>
+        )}
+        {counts.incompleteDays > 0 && (
+          <span
+            className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800"
+            title={`${counts.incompleteDays} day(s) with no punch-out`}
+          >
+            {counts.incompleteDays} open
+          </span>
+        )}
+      </p>
+    </div>
   );
 }
 
 export function AttendanceEmployees() {
   const navigate = useNavigate();
   const { canManageEmployees, isAdmin, canAccessNav } = useAttendancePermissions();
-  const [month, setMonth] = useState(currentMonth());
-  const { data: summary } = useAttendanceSummary(monthRange(month));
 
-  // Counts are shown inline here so nobody needs a separate "attendance summary" page.
-  const countsByEmployee = useMemo(
-    () => new Map((summary?.rows ?? []).map((r) => [r.employeeId, r])),
-    [summary]
-  );
+  const [month, setMonth] = useState(currentMonth());
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
+
   const { data, isLoading } = useEmployeesList({ search: searchQuery, page, limit: 20 });
+  const { data: summary } = useAttendanceSummary(monthRange(month));
+  const { data: faces } = useFaceEnrollment();
   const importMutation = useImportEmployees();
   const deleteEmployee = useDeleteEmployee();
 
   const rows = data?.data ?? [];
-  const linkedCount = useMemo(
-    () => rows.filter((employee) => employee.userId && typeof employee.userId === 'object').length,
-    [rows]
+
+  const countsByEmployee = useMemo(
+    () => new Map((summary?.rows ?? []).map((r) => [r.employeeId, r])),
+    [summary]
+  );
+  const facesByEmployee = useMemo(
+    () => new Map((faces?.data ?? []).map((r) => [r.employeeId, r.sampleCount])),
+    [faces]
+  );
+  const enrolledCount = useMemo(
+    () => (faces?.data ?? []).filter((r) => r.sampleCount > 0).length,
+    [faces]
   );
 
   const handleCsvImport = () => {
@@ -98,37 +152,26 @@ export function AttendanceEmployees() {
     input.click();
   };
 
+  const totalEmployees = data?.pagination?.total ?? rows.length;
+
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* One header row: identity on the left, actions on the right. The month picker
+          belongs with the table, not up here — it only affects one column. */}
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">People</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-800">People</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Your team and this month&apos;s attendance. Click anyone to see their calendar and fix a day.
+            Your team and their attendance. Open anyone to see their calendar or fix a day.
           </p>
         </div>
+
         <div className="flex flex-wrap items-center gap-2">
-          <div className="mr-2 flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setMonth(shiftMonth(month, -1))}
-              className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
-              aria-label="Previous month"
-            >
-              <FiChevronLeft className="size-4" />
-            </button>
-            <span className="min-w-[8rem] text-center text-sm font-semibold text-slate-800">
-              {monthLabel(month)}
-            </span>
-            <button
-              type="button"
-              onClick={() => setMonth(shiftMonth(month, 1))}
-              className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
-              aria-label="Next month"
-            >
-              <FiChevronRight className="size-4" />
-            </button>
-          </div>
+          {canManageEmployees && (
+            <Button variant="outline" onClick={() => navigate('/dashboard/attendance/face-enrollment')}>
+              <FiCamera className="size-4" /> Face enrolment
+            </Button>
+          )}
           {canAccessNav('idCards') && (
             <Button variant="outline" onClick={() => navigate('/dashboard/attendance/id-cards')}>
               <FiCreditCard className="size-4" /> ID cards
@@ -147,28 +190,39 @@ export function AttendanceEmployees() {
         </div>
       </div>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="flex items-center gap-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
-            <FiUsers className="size-5" />
-          </div>
-          <div>
-            <p className="text-sm text-slate-500">Total employees</p>
-            <p className="text-2xl font-bold text-slate-800">{data?.pagination?.total ?? rows.length}</p>
-          </div>
-        </Card>
-        <Card className="flex items-center gap-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700">
-            <FiUserCheck className="size-5" />
-          </div>
-          <div>
-            <p className="text-sm text-slate-500">App linked (this page)</p>
-            <p className="text-2xl font-bold text-slate-800">{linkedCount}</p>
-          </div>
-        </Card>
-      </div>
-
       <Card>
+        {/* Toolbar: the month stepper sits here because it scopes the attendance column,
+            with the two counts that are actually worth a glance. */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setMonth(shiftMonth(month, -1))}
+              className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+              aria-label="Previous month"
+            >
+              <FiChevronLeft className="size-4" />
+            </button>
+            <span className="min-w-[8.5rem] text-center text-sm font-semibold text-slate-800">
+              {monthLabel(month)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setMonth(shiftMonth(month, 1))}
+              className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+              aria-label="Next month"
+            >
+              <FiChevronRight className="size-4" />
+            </button>
+          </div>
+
+          <p className="text-sm text-slate-500">
+            <span className="font-semibold text-slate-800">{totalEmployees}</span> people
+            <span className="mx-1.5 text-slate-300">·</span>
+            <span className="font-semibold text-slate-800">{enrolledCount}</span> face-enrolled
+          </p>
+        </div>
+
         <DataTable<Employee>
           columns={[
             {
@@ -178,57 +232,68 @@ export function AttendanceEmployees() {
                 <div className="flex items-center gap-3">
                   <EmployeeAvatar employee={employee} />
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-800">{employee.fullName}</p>
-                    <p className="truncate text-xs text-slate-500">{employee.employeeCode}</p>
+                    <p className="truncate font-medium text-slate-900">{employee.fullName}</p>
+                    <p className="truncate text-xs text-slate-500">
+                      {employee.employeeCode}
+                      {employee.department ? ` · ${employee.department}` : ''}
+                    </p>
                   </div>
                 </div>
               ),
             },
-            { key: 'dept', label: 'Department', render: (employee) => employee.department ?? '—' },
             {
               key: 'attendance',
-              label: `${monthLabel(month)} attendance`,
+              label: 'Attendance',
+              render: (employee) => <AttendanceBar counts={countsByEmployee.get(employee._id)} />,
+            },
+            {
+              key: 'face',
+              label: 'Face ID',
               render: (employee) => {
-                const c = countsByEmployee.get(employee._id);
-                if (!c) return <span className="text-sm text-slate-400">—</span>;
-                return (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="font-medium text-emerald-700" title="Present">{c.presentDays}P</span>
-                    <span className={c.absentDays > 0 ? 'font-medium text-rose-700' : 'text-slate-400'} title="Absent">
-                      {c.absentDays}A
+                const samples = facesByEmployee.get(employee._id) ?? 0;
+                if (samples > 0) {
+                  return (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-700">
+                      <FiCamera className="size-3" aria-hidden />
+                      {samples}
                     </span>
-                    <span className="text-indigo-600" title="Week off">{c.weekOffDays}W</span>
-                    <span className="text-violet-600" title="Holiday">{c.holidayDays}H</span>
-                    {c.incompleteDays > 0 && (
-                      <span
-                        className="rounded-full bg-amber-100 px-1.5 text-[11px] font-medium text-amber-800"
-                        title={`${c.incompleteDays} day(s) with no punch-out`}
-                      >
-                        {c.incompleteDays}!
-                      </span>
-                    )}
-                  </div>
+                  );
+                }
+                if (!canManageEmployees) return <span className="text-sm text-slate-300">—</span>;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/dashboard/attendance/face-enrollment')}
+                    className="text-xs font-medium text-slate-400 hover:text-indigo-600"
+                  >
+                    Enrol
+                  </button>
                 );
               },
             },
             {
-              key: 'app',
-              label: 'App login',
+              key: 'status',
+              label: 'Status',
               render: (employee) =>
-                employee.userId && typeof employee.userId === 'object' ? (
-                  <span className="text-sm text-teal-700">{employee.userId.fullName}</span>
+                employee.status === 'active' ? (
+                  <span className="inline-flex items-center gap-1.5 text-sm text-slate-600">
+                    <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden />
+                    Active
+                  </span>
                 ) : (
-                  <span className="text-sm text-slate-400">Not linked</span>
+                  <span className="inline-flex items-center gap-1.5 text-sm text-slate-400">
+                    <span className="size-1.5 rounded-full bg-slate-300" aria-hidden />
+                    Inactive
+                  </span>
                 ),
             },
-            { key: 'status', label: 'Status', render: (employee) => <StatusBadge status={employee.status} /> },
           ]}
           data={rows}
           rowKey={(employee) => employee._id}
           search={{
             value: searchInput,
             onChange: setSearchInput,
-            placeholder: 'Search by name, code, department...',
+            placeholder: 'Search name, code or department…',
             onSearchSubmit: () => {
               setSearchQuery(searchInput);
               setPage(1);
@@ -248,35 +313,42 @@ export function AttendanceEmployees() {
           isLoading={isLoading}
           emptyMessage="No employees found."
           renderActions={(employee) => (
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-[#305dff] hover:bg-indigo-50"
-                onClick={() => navigate(`/dashboard/attendance/employees/${employee._id}`)}
-              >
-                View
-              </button>
-              {canManageEmployees ? (
-                <button
-                  type="button"
-                  className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-                  onClick={() => navigate(`/dashboard/attendance/employees/${employee._id}/edit`)}
-                >
-                  Edit
-                </button>
-              ) : null}
-              {isAdmin ? (
-                <button
-                  type="button"
-                  className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
-                  onClick={() => setDeleteTarget(employee)}
-                >
-                  Delete
-                </button>
-              ) : null}
-            </div>
+            <TableRowActions
+              items={[
+                {
+                  key: 'view',
+                  label: 'Open employee',
+                  icon: FiEye,
+                  variant: 'primary',
+                  onClick: () => navigate(`/dashboard/attendance/employees/${employee._id}`),
+                },
+                {
+                  key: 'edit',
+                  label: 'Edit employee',
+                  icon: FiEdit2,
+                  hidden: !canManageEmployees,
+                  onClick: () => navigate(`/dashboard/attendance/employees/${employee._id}/edit`),
+                },
+                {
+                  key: 'delete',
+                  label: 'Delete employee',
+                  icon: FiTrash2,
+                  variant: 'danger',
+                  hidden: !isAdmin,
+                  onClick: () => setDeleteTarget(employee),
+                },
+              ]}
+            />
           )}
         />
+
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
+          <LegendSwatch cls="bg-emerald-500" label="Present" />
+          <LegendSwatch cls="bg-rose-400" label="Absent" />
+          <LegendSwatch cls="bg-sky-300" label="Leave" />
+          <LegendSwatch cls="bg-violet-300" label="Holiday" />
+          <LegendSwatch cls="bg-slate-200" label="Week off" />
+        </div>
       </Card>
 
       {importMutation.data?.errors?.length ? (
@@ -323,5 +395,14 @@ export function AttendanceEmployees() {
         </div>
       )}
     </div>
+  );
+}
+
+function LegendSwatch({ cls, label }: { cls: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`size-2 rounded-sm ${cls}`} aria-hidden />
+      {label}
+    </span>
   );
 }

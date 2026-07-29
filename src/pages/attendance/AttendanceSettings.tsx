@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiTablet } from 'react-icons/fi';
+import { FiCamera, FiTablet } from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
@@ -17,6 +17,15 @@ export function AttendanceSettings() {
   const { canManageSitesShifts, isAdmin, canAccessNav } = useAttendancePermissions();
   const { data: settings } = useAttendanceSettings();
   const updateSettings = useUpdateAttendanceSettings();
+
+  const [face, setFace] = useState({
+    faceRecognitionEnabled: false,
+    faceMatchThreshold: '0.6',
+    faceMarginThreshold: '0.04',
+    faceAntiSpoofMode: 'record' as 'off' | 'record' | 'block',
+    faceAntiSpoofThreshold: '0.3',
+    faceLivenessThreshold: '0',
+  });
 
   const [policy, setPolicy] = useState({
     maxGpsAccuracyMeters: '100',
@@ -57,8 +66,27 @@ export function AttendanceSettings() {
         weeklyOffDays: settings.weeklyOffDays ?? [0],
         paidWeeklyOff: settings.paidWeeklyOff ?? true,
       });
+      setFace({
+        faceRecognitionEnabled: settings.faceRecognitionEnabled ?? false,
+        faceMatchThreshold: String(settings.faceMatchThreshold ?? 0.6),
+        faceMarginThreshold: String(settings.faceMarginThreshold ?? 0.04),
+        faceAntiSpoofMode: settings.faceAntiSpoofMode ?? 'record',
+        faceAntiSpoofThreshold: String(settings.faceAntiSpoofThreshold ?? 0.3),
+        faceLivenessThreshold: String(settings.faceLivenessThreshold ?? 0),
+      });
     }
   }, [settings]);
+
+  const saveFace = async () => {
+    await updateSettings.mutateAsync({
+      faceRecognitionEnabled: face.faceRecognitionEnabled,
+      faceMatchThreshold: parseFloat(face.faceMatchThreshold) || 0.6,
+      faceMarginThreshold: parseFloat(face.faceMarginThreshold) || 0,
+      faceAntiSpoofMode: face.faceAntiSpoofMode,
+      faceAntiSpoofThreshold: parseFloat(face.faceAntiSpoofThreshold) || 0,
+      faceLivenessThreshold: parseFloat(face.faceLivenessThreshold) || 0,
+    });
+  };
 
   const savePolicy = async () => {
     await updateSettings.mutateAsync({
@@ -95,9 +123,14 @@ export function AttendanceSettings() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-800">Attendance settings</h1>
         {canAccessNav('kioskDevices') && (
-          <Button variant="outline" onClick={() => navigate('/dashboard/attendance/kiosk-devices')}>
-            <FiTablet className="size-4" /> Kiosk devices
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => navigate('/dashboard/attendance/kiosk-devices')}>
+              <FiTablet className="size-4" /> Kiosk devices
+            </Button>
+            <Button variant="outline" onClick={() => navigate('/dashboard/attendance/face-kiosk')}>
+              <FiCamera className="size-4" /> Face kiosk (trial)
+            </Button>
+          </div>
         )}
       </div>
 
@@ -152,6 +185,124 @@ export function AttendanceSettings() {
         {canManageSitesShifts && (
           <Button className="mt-5" onClick={savePolicy} loading={updateSettings.isPending}>
             Save policies
+          </Button>
+        )}
+      </Card>
+
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-slate-800">Face recognition at kiosks</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Lets a kiosk identify an enrolled employee by camera instead of asking them to
+              tap their name. It only selects them — they still confirm the punch.
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/dashboard/attendance/face-kiosk')}>
+            Test rig
+          </Button>
+        </div>
+
+        <label className="mt-4 flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={face.faceRecognitionEnabled}
+            onChange={(e) => setFace({ ...face, faceRecognitionEnabled: e.target.checked })}
+            disabled={!canManageSitesShifts}
+          />
+          <span>
+            Enable face recognition
+            <span className="mt-0.5 block text-xs text-slate-400">
+              Off by default. Enrol faces under People → Face enrolment first, or kiosks will
+              fall straight through to the name grid.
+            </span>
+          </span>
+        </label>
+
+        <div className="mt-4 grid max-w-2xl gap-5 sm:grid-cols-2">
+          <div>
+            <Input
+              label="Match threshold"
+              type="number"
+              step="0.01"
+              value={face.faceMatchThreshold}
+              onChange={(e) => setFace({ ...face, faceMatchThreshold: e.target.value })}
+              disabled={!canManageSitesShifts}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Similarity needed to name someone, 0–1. Higher is stricter: fewer wrong
+              identifications, more people falling back to tapping their name.
+            </p>
+          </div>
+          <div>
+            <Input
+              label="Margin threshold"
+              type="number"
+              step="0.01"
+              value={face.faceMarginThreshold}
+              onChange={(e) => setFace({ ...face, faceMarginThreshold: e.target.value })}
+              disabled={!canManageSitesShifts}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              How far ahead of the next-closest person a match must be. Guards against
+              lookalikes and relatives resolving to a coin flip.
+            </p>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Anti-spoof</label>
+            <select
+              value={face.faceAntiSpoofMode}
+              onChange={(e) =>
+                setFace({ ...face, faceAntiSpoofMode: e.target.value as 'off' | 'record' | 'block' })
+              }
+              disabled={!canManageSitesShifts}
+              className="w-full rounded-lg border-2 border-slate-200 bg-white px-3 py-2.5 text-sm"
+            >
+              <option value="off">Off — ignore the score</option>
+              <option value="record">Record only — store it, never block</option>
+              <option value="block">Block — refuse to identify below the threshold</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-400">
+              Only choose Block once the test rig shows live faces and photos land in clearly
+              separate ranges on your own cameras. A false positive stops a real employee
+              punching, which costs more than a rare spoof.
+            </p>
+          </div>
+          <div>
+            <Input
+              label="Anti-spoof threshold"
+              type="number"
+              step="0.01"
+              value={face.faceAntiSpoofThreshold}
+              onChange={(e) => setFace({ ...face, faceAntiSpoofThreshold: e.target.value })}
+              disabled={!canManageSitesShifts || face.faceAntiSpoofMode !== 'block'}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Used only in Block mode. The test rig suggests a value once you record both a
+              live face and a photo.
+            </p>
+          </div>
+          <div>
+            <Input
+              label="Liveness threshold"
+              type="number"
+              step="0.01"
+              value={face.faceLivenessThreshold}
+              onChange={(e) => setFace({ ...face, faceLivenessThreshold: e.target.value })}
+              disabled={!canManageSitesShifts}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              A second, independent spoof signal. Leave at 0 to record it without gating.
+              Raise it only if the test rig shows liveness separates live faces from photos
+              on your cameras — it may not, and the score is recorded either way.
+            </p>
+          </div>
+        </div>
+
+        {canManageSitesShifts && (
+          <Button className="mt-5" onClick={saveFace} loading={updateSettings.isPending}>
+            Save face settings
           </Button>
         )}
       </Card>

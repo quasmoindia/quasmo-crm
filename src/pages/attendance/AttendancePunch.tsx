@@ -28,6 +28,7 @@ import { GeofenceWarningBanner } from '../../components/attendance/GeofenceWarni
 import { GpsStatusBanner } from '../../components/attendance/GpsStatusBanner';
 import { PunchConfirmModal } from '../../components/attendance/PunchConfirmModal';
 import { EmployeePhotoGrid, shiftTimingLabel } from '../../components/attendance/EmployeePhotoGrid';
+import { KioskFaceScanner, type FaceMatchPayload } from '../../components/attendance/KioskFaceScanner';
 import { KioskToolbar } from '../../components/attendance/KioskToolbar';
 import { useAttendanceGeolocation } from '../../hooks/useAttendanceGeolocation';
 import { useKioskMode } from '../../hooks/useKioskMode';
@@ -64,6 +65,10 @@ export function AttendancePunch() {
   const [directoryQuery, setDirectoryQuery] = useState('');
   const [shiftFilter, setShiftFilter] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<PunchDirectoryEntry | null>(null);
+  // On a face kiosk the camera leads and the name grid is one button away. On a simple
+  // kiosk the grid is all there is — no face code runs and no models are downloaded.
+  const [showDirectoryOnFaceKiosk, setShowDirectoryOnFaceKiosk] = useState(false);
+  const [faceMatch, setFaceMatch] = useState<FaceMatchPayload | null>(null);
   const { data: directoryData, isLoading: loadingDirectory } = usePunchDirectory(
     { search: directoryQuery, shiftId: shiftFilter || undefined },
     !isKioskDevice && step === 'login' && loginMode === 'photo'
@@ -140,7 +145,10 @@ export function AttendancePunch() {
     }
   };
 
-  const selectEmployeeFromPhoto = async (emp: PunchDirectoryEntry) => {
+  const selectEmployeeFromPhoto = async (emp: PunchDirectoryEntry, match?: FaceMatchPayload) => {
+    // Passed explicitly rather than read from state: tapping a name is a manual
+    // identification and must not inherit a match left over from the camera.
+    setFaceMatch(match ?? null);
     setSelectedEmployee(emp);
     setEmployeeCode(emp.employeeCode);
     setPhone('');
@@ -234,7 +242,12 @@ export function AttendancePunch() {
     setLoading(true);
     try {
       if (isKioskDevice) {
-        const payload = { employeeId: selectedEmployee!._id, ...coords, selfie: selfieToSubmit };
+        const payload = {
+          employeeId: selectedEmployee!._id,
+          ...coords,
+          selfie: selfieToSubmit,
+          faceMatch: faceMatch ?? undefined,
+        };
         if (kind === 'in') await kioskPunchInApi(payload);
         else await kioskPunchOutApi(payload);
       } else {
@@ -272,6 +285,8 @@ export function AttendancePunch() {
 
   const resetToLogin = () => {
     if (!isKioskDevice) clearPunchToken();
+    setFaceMatch(null);
+    setShowDirectoryOnFaceKiosk(false);
     setStep('login');
     setSelectedEmployee(null);
     setEmployeeCode('');
@@ -303,6 +318,9 @@ export function AttendancePunch() {
   const canPunchIn = isKioskDevice ? !kioskToday?.open : !todayRecord?.punchIn;
   const canPunchOut = isKioskDevice ? !!kioskToday?.open : todayRecord?.punchIn && !todayRecord?.punchOut;
   const kioskDirectoryList = kioskDirectoryData?.data ?? [];
+  // The paired device declares its own mode, so a simple kiosk behaves exactly as it
+  // did before this feature existed.
+  const isFaceKiosk = isKioskDevice && kioskDirectoryData?.deviceMode === 'face';
   const filteredKioskDirectory = directorySearch.trim()
     ? kioskDirectoryList.filter(
         (e) =>
@@ -336,7 +354,18 @@ export function AttendancePunch() {
           <KioskToolbar />
         </div>
 
-        {step === 'login' && loginMode === 'photo' && (
+        {step === 'login' && loginMode === 'photo' && isFaceKiosk && !showDirectoryOnFaceKiosk && (
+          <KioskFaceScanner
+            onIdentify={(employeeId, match) => {
+              const emp = directory.find((e) => e._id === employeeId);
+              if (!emp) return;
+              void selectEmployeeFromPhoto(emp, match);
+            }}
+            onUseDirectory={() => setShowDirectoryOnFaceKiosk(true)}
+          />
+        )}
+
+        {step === 'login' && loginMode === 'photo' && !(isFaceKiosk && !showDirectoryOnFaceKiosk) && (
           <div className="rounded-2xl bg-white p-4 shadow-lg sm:p-6">
             <div className="mb-4 flex flex-col gap-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

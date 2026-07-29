@@ -1,0 +1,180 @@
+/*
+ * Face capture HUD.
+ *
+ * Visual language is optical metrology rather than science fiction: a machine-vision
+ * instrument panel, where amber means "illuminator active / searching" and teal is
+ * reserved strictly for a confirmed measurement. Nothing else is allowed to be teal,
+ * so a lock reads instantly across a room.
+ *
+ * Typography is the system stack plus a mono for readouts. A kiosk has to work with no
+ * network, so a downloaded display face would be a liability at the gate; personality
+ * comes from tracking, weight and scale instead.
+ */
+
+.hud {
+  --void: #0b1020;
+  --panel: #131a2e;
+  --grid: #1e2942;
+  --signal: #ffb020;
+  --measure: #4fd1c5;
+  --alert: #ff6b5b;
+  --ink: #e8edf7;
+  --ink-dim: #7c8aa8;
+  --font-data: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  background:
+    radial-gradient(120% 80% at 50% 0%, #16203a 0%, transparent 60%),
+    var(--void);
+  color: var(--ink);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+/* Faint engineering grid — the enclosure the instrument sits in. */
+.hud-grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(79, 209, 197, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(79, 209, 197, 0.045) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.hud-label {
+  font-family: var(--font-data);
+  font-size: 0.625rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.hud-readout {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.hud-panel {
+  background: linear-gradient(180deg, rgba(30, 41, 66, 0.55) 0%, rgba(19, 26, 46, 0.55) 100%);
+  border: 1px solid var(--grid);
+}
+
+/* ── Signature: the reticle ─────────────────────────────────────────────────
+   Four corner brackets that track the detected face. Amber while searching,
+   teal once every gate passes. The brackets pull inward on lock — a small,
+   physical-feeling snap that reads as the instrument committing. */
+.reticle {
+  position: absolute;
+  pointer-events: none;
+  transition:
+    left 90ms linear,
+    top 90ms linear,
+    width 90ms linear,
+    height 90ms linear;
+}
+
+.reticle-corner {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-color: var(--signal);
+  border-style: solid;
+  border-width: 0;
+  transition:
+    border-color 200ms ease,
+    inset 220ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+.reticle-corner.tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
+.reticle-corner.tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
+.reticle-corner.bl { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; }
+.reticle-corner.br { bottom: 0; right: 0; border-bottom-width: 2px; border-right-width: 2px; }
+
+.reticle.is-locked .reticle-corner {
+  border-color: var(--measure);
+  filter: drop-shadow(0 0 6px rgba(79, 209, 197, 0.55));
+}
+
+/* Locked brackets tuck in by 6px — the snap. */
+.reticle.is-locked .reticle-corner.tl { transform: translate(6px, 6px); }
+.reticle.is-locked .reticle-corner.tr { transform: translate(-6px, 6px); }
+.reticle.is-locked .reticle-corner.bl { transform: translate(6px, -6px); }
+.reticle.is-locked .reticle-corner.br { transform: translate(-6px, -6px); }
+
+.reticle-corner { transition-property: border-color, transform; }
+
+/* Single sweep on capture. Fires once per sample, not ambiently — an idle
+   scanning animation would be decoration, this one marks a real event. */
+@keyframes hud-sweep {
+  0% { top: 0; opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.hud-sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--measure), transparent);
+  box-shadow: 0 0 12px rgba(79, 209, 197, 0.8);
+  animation: hud-sweep 620ms cubic-bezier(0.4, 0, 0.2, 1) 1;
+  pointer-events: none;
+}
+
+/* Countdown ring while the pose holds steady. */
+@keyframes hud-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.hud-holding {
+  animation: hud-pulse 900ms ease-in-out infinite;
+}
+
+/* Capture step markers. */
+.hud-step {
+  border: 1px solid var(--grid);
+  background: rgba(19, 26, 46, 0.6);
+  transition: border-color 200ms ease, background 200ms ease;
+}
+
+.hud-step[data-state='active'] {
+  border-color: var(--signal);
+  background: rgba(255, 176, 32, 0.08);
+}
+
+.hud-step[data-state='done'] {
+  border-color: rgba(79, 209, 197, 0.5);
+  background: rgba(79, 209, 197, 0.07);
+}
+
+/* Meter bars for tracking readouts. */
+.hud-meter {
+  height: 4px;
+  background: var(--grid);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.hud-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--signal);
+  transition: width 140ms linear, background 200ms ease;
+}
+
+.hud-meter[data-ok='true'] > span {
+  background: var(--measure);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-sweep,
+  .hud-holding {
+    animation: none;
+  }
+  .reticle,
+  .reticle-corner,
+  .hud-meter > span {
+    transition: none;
+  }
+}

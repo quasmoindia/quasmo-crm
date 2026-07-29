@@ -1,16 +1,19 @@
 import { useState } from 'react';
-import { FiCopy, FiPlus, FiSlash, FiRefreshCw } from 'react-icons/fi';
+import { FiCopy, FiPlus, FiSlash, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
 import {
   useCreateKioskDevice,
+  useDeleteKioskDevice,
+  useUpdateKioskDevice,
   useKioskDevices,
   useRegenerateKioskDevice,
   useRevokeKioskDevice,
   useSitesList,
 } from '../../api/attendance';
-import type { KioskDevice, WorkSite } from '../../types/attendance';
+import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
+import type { KioskDevice, KioskDeviceMode, WorkSite } from '../../types/attendance';
 
 function siteName(workSiteId: KioskDevice['workSiteId']): string {
   if (typeof workSiteId === 'string') return workSiteId;
@@ -24,16 +27,22 @@ function setupLinkFor(rawToken: string): string {
 export function KioskDevices() {
   const { data: devicesData, isLoading } = useKioskDevices();
   const { data: sitesData } = useSitesList();
+  // Delete is admin-only, matching the backend gate on the route.
+  const { isAdmin } = useAttendancePermissions();
   const createDevice = useCreateKioskDevice();
+  const updateDevice = useUpdateKioskDevice();
+  const deleteDevice = useDeleteKioskDevice();
   const revokeDevice = useRevokeKioskDevice();
   const regenerateDevice = useRegenerateKioskDevice();
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [workSiteId, setWorkSiteId] = useState('');
+  const [mode, setMode] = useState<KioskDeviceMode>('simple');
   const [error, setError] = useState('');
   const [rawToken, setRawToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<KioskDevice | null>(null);
 
   const devices = devicesData?.data ?? [];
   const sites: WorkSite[] = sitesData?.data ?? [];
@@ -51,7 +60,7 @@ export function KioskDevices() {
       return;
     }
     try {
-      const result = await createDevice.mutateAsync({ name: name.trim(), workSiteId });
+      const result = await createDevice.mutateAsync({ name: name.trim(), workSiteId, mode });
       setRawToken(result.rawToken);
       resetForm();
     } catch (e) {
@@ -118,6 +127,24 @@ export function KioskDevices() {
               </select>
             </label>
           </div>
+          <fieldset className="mt-5">
+            <legend className="text-sm font-medium text-slate-700">Kiosk type</legend>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              <ModeOption
+                selected={mode === 'simple'}
+                onSelect={() => setMode('simple')}
+                title="Simple kiosk"
+                body="Employees tap their photo to punch. No camera recognition, nothing extra to download."
+              />
+              <ModeOption
+                selected={mode === 'face'}
+                onSelect={() => setMode('face')}
+                title="Face recognition kiosk"
+                body="Camera identifies enrolled employees automatically. Tapping a name stays available as a fallback."
+              />
+            </div>
+          </fieldset>
+
           {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
           <div className="mt-4 flex gap-3">
             <Button onClick={() => void handleCreate()} loading={createDevice.isPending}>
@@ -142,6 +169,7 @@ export function KioskDevices() {
                 <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                   <th className="py-2 pr-4">Name</th>
                   <th className="py-2 pr-4">Work site</th>
+                  <th className="py-2 pr-4">Type</th>
                   <th className="py-2 pr-4">Status</th>
                   <th className="py-2 pr-4">Last used</th>
                   <th className="py-2 pr-4 text-right">Actions</th>
@@ -152,6 +180,25 @@ export function KioskDevices() {
                   <tr key={d._id} className="border-b border-slate-100 last:border-0">
                     <td className="py-3 pr-4 font-medium text-slate-900">{d.name}</td>
                     <td className="py-3 pr-4 text-slate-600">{siteName(d.workSiteId)}</td>
+                    <td className="py-3 pr-4">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void updateDevice.mutateAsync({
+                            id: d._id,
+                            payload: { mode: d.mode === 'face' ? 'simple' : 'face' },
+                          })
+                        }
+                        title="Switch kiosk type"
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
+                          d.mode === 'face'
+                            ? 'bg-teal-100 text-teal-800 hover:bg-teal-200'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {d.mode === 'face' ? 'Face recognition' : 'Simple'}
+                      </button>
+                    </td>
                     <td className="py-3 pr-4">
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -174,6 +221,15 @@ export function KioskDevices() {
                             <FiSlash className="size-3.5" /> Revoke
                           </Button>
                         )}
+                        {isAdmin && (
+                          <Button
+                            variant="outline"
+                            className="border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                            onClick={() => setDeleteTarget(d)}
+                          >
+                            <FiTrash2 className="size-3.5" /> Delete
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -183,6 +239,53 @@ export function KioskDevices() {
           </div>
         )}
       </Card>
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => setDeleteTarget(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-900">Delete kiosk device</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Permanently remove <span className="font-medium">{deleteTarget.name}</span>? The tablet
+              will stop working immediately and must be paired again from scratch.
+            </p>
+            <p className="mt-2 text-sm text-slate-500">
+              Punches already recorded on this device are kept — attendance records store the work
+              site, not the device.
+            </p>
+            {deleteTarget.isActive && (
+              <p className="mt-3 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900">
+                This device is still active. If it is genuinely in service, Revoke keeps it in the
+                list for audit instead of removing it.
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleteDevice.isPending}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                loading={deleteDevice.isPending}
+                onClick={async () => {
+                  try {
+                    await deleteDevice.mutateAsync(deleteTarget._id);
+                    setDeleteTarget(null);
+                  } catch (err) {
+                    setError((err as Error).message);
+                    setDeleteTarget(null);
+                  }
+                }}
+              >
+                Delete device
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {rawToken && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -207,5 +310,31 @@ export function KioskDevices() {
         </div>
       )}
     </div>
+  );
+}
+
+function ModeOption({
+  selected,
+  onSelect,
+  title,
+  body,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  title: string;
+  body: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`rounded-xl border-2 p-3 text-left transition-colors ${
+        selected ? 'border-[#305dff] bg-[#305dff]/5' : 'border-slate-200 hover:border-slate-300'
+      }`}
+    >
+      <span className="block text-sm font-semibold text-slate-900">{title}</span>
+      <span className="mt-1 block text-xs text-slate-500">{body}</span>
+    </button>
   );
 }
