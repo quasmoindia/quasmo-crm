@@ -46,9 +46,7 @@ export function EmployeeAttendanceSection({
   const selectedDay = data?.days.find((d) => d.date === selectedDate) ?? null;
 
   return (
-    <Card className="mb-6">
-      <h2 className="mb-4 font-semibold text-slate-800">Attendance</h2>
-
+    <Card>
       {isError ? (
         <p className="py-6 text-center text-sm text-red-600">{(error as Error).message}</p>
       ) : (

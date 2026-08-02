@@ -457,13 +457,20 @@ export function usePayrollReport(params?: {
 
 export function usePayrollEmployeeDetail(
   employeeId: string | null,
-  params: { dateFrom: string; dateTo: string; payComponent?: PayComponent }
+  params: {
+    dateFrom: string;
+    dateTo: string;
+    payComponent?: PayComponent;
+    /** Also list days that earned nothing (absent, unpaid leave, no punch-out). */
+    includeUnpaidDays?: boolean;
+  }
 ) {
   const queryParams: Record<string, string> = {
     dateFrom: params.dateFrom,
     dateTo: params.dateTo,
   };
   if (params.payComponent) queryParams.payComponent = params.payComponent;
+  if (params.includeUnpaidDays) queryParams.includeUnpaidDays = 'true';
   return useQuery({
     queryKey: ['attendance', 'payroll-detail', employeeId, params],
     queryFn: () =>

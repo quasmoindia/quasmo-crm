@@ -27,6 +27,15 @@ export function AttendanceSettings() {
     faceLivenessThreshold: '0',
   });
 
+  const [employer, setEmployer] = useState({
+    employerName: '',
+    employerAddressLine1: '',
+    employerAddressLine2: '',
+    employerPfCode: '',
+    employerEsiCode: '',
+    employerLogoUrl: '',
+  });
+
   const [policy, setPolicy] = useState({
     maxGpsAccuracyMeters: '100',
     otpExpiryMinutes: '10',
@@ -74,8 +83,20 @@ export function AttendanceSettings() {
         faceAntiSpoofThreshold: String(settings.faceAntiSpoofThreshold ?? 0.3),
         faceLivenessThreshold: String(settings.faceLivenessThreshold ?? 0),
       });
+      setEmployer({
+        employerName: settings.employerName ?? '',
+        employerAddressLine1: settings.employerAddressLine1 ?? '',
+        employerAddressLine2: settings.employerAddressLine2 ?? '',
+        employerPfCode: settings.employerPfCode ?? '',
+        employerEsiCode: settings.employerEsiCode ?? '',
+        employerLogoUrl: settings.employerLogoUrl ?? '',
+      });
     }
   }, [settings]);
+
+  const saveEmployer = async () => {
+    await updateSettings.mutateAsync(employer);
+  };
 
   const saveFace = async () => {
     await updateSettings.mutateAsync({
@@ -485,6 +506,68 @@ export function AttendanceSettings() {
         {canManageSitesShifts && (
           <Button className="mt-5" onClick={savePolicy} loading={updateSettings.isPending}>
             Save deduction settings
+          </Button>
+        )}
+      </Card>
+
+      <Card>
+        <h2 className="font-semibold text-slate-800">Employer details (payslips)</h2>
+        <p className="mt-1 mb-4 text-sm text-slate-500">
+          Printed as the letterhead on every payslip. Blank fields are left off the slip rather
+          than printed empty.
+        </p>
+        <div className="grid max-w-3xl gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Input
+              label="Company name"
+              value={employer.employerName}
+              onChange={(e) => setEmployer({ ...employer, employerName: e.target.value })}
+              placeholder="e.g. Quality Scientific & Mechanical Works"
+              disabled={!canManageSitesShifts}
+            />
+          </div>
+          <Input
+            label="Address line 1"
+            value={employer.employerAddressLine1}
+            onChange={(e) => setEmployer({ ...employer, employerAddressLine1: e.target.value })}
+            placeholder="Plot No. 84, HSIDC Industrial Area"
+            disabled={!canManageSitesShifts}
+          />
+          <Input
+            label="Address line 2"
+            value={employer.employerAddressLine2}
+            onChange={(e) => setEmployer({ ...employer, employerAddressLine2: e.target.value })}
+            placeholder="Ambala Cantt, Haryana 133001"
+            disabled={!canManageSitesShifts}
+          />
+          <Input
+            label="PF establishment code"
+            value={employer.employerPfCode}
+            onChange={(e) => setEmployer({ ...employer, employerPfCode: e.target.value })}
+            disabled={!canManageSitesShifts}
+          />
+          <Input
+            label="ESI establishment code"
+            value={employer.employerEsiCode}
+            onChange={(e) => setEmployer({ ...employer, employerEsiCode: e.target.value })}
+            disabled={!canManageSitesShifts}
+          />
+          <div className="sm:col-span-2">
+            <Input
+              label="Logo URL"
+              value={employer.employerLogoUrl}
+              onChange={(e) => setEmployer({ ...employer, employerLogoUrl: e.target.value })}
+              placeholder="https://..."
+              disabled={!canManageSitesShifts}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Must be publicly reachable — the PDF renderer fetches it at generation time.
+            </p>
+          </div>
+        </div>
+        {canManageSitesShifts && (
+          <Button className="mt-5" onClick={saveEmployer} loading={updateSettings.isPending}>
+            Save employer details
           </Button>
         )}
       </Card>

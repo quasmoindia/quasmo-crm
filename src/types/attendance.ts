@@ -171,6 +171,13 @@ export interface AttendanceSettings {
   faceAntiSpoofMode?: 'off' | 'record' | 'block';
   faceAntiSpoofThreshold?: number;
   faceLivenessThreshold?: number;
+  /** Employer identity printed as the payslip letterhead. */
+  employerName?: string;
+  employerAddressLine1?: string;
+  employerAddressLine2?: string;
+  employerPfCode?: string;
+  employerEsiCode?: string;
+  employerLogoUrl?: string;
 }
 
 export interface AttendanceDashboardHoliday {

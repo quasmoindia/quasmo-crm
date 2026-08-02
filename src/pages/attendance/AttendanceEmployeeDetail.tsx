@@ -1,23 +1,43 @@
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
-import { FiFileText } from 'react-icons/fi';
 import { Button } from '../../components/Button';
-import { Card } from '../../components/Card';
-import { DataTable } from '../../components/DataTable';
-import { AttendanceStatusBadge } from '../../components/attendance/AttendanceStatusBadge';
+import { AttendanceSectionTabs } from '../../components/attendance/AttendanceSectionTabs';
 import { EmployeeAttendanceSection } from '../../components/attendance/EmployeeAttendanceSection';
-import { useDeleteEmployee, useEmployee, useRecordsList } from '../../api/attendance';
+import { EmployeePayrollSection } from '../../components/attendance/EmployeePayrollSection';
+import { EmployeeProfileSection } from '../../components/attendance/EmployeeProfileSection';
+import { useDeleteEmployee, useEmployee } from '../../api/attendance';
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
-import type { AttendanceRecord } from '../../types/attendance';
+
+const TAB_IDS = ['profile', 'attendance', 'payroll'] as const;
+type TabId = (typeof TAB_IDS)[number];
 
 export function AttendanceEmployeeDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { canManageEmployees, isAdmin } = useAttendancePermissions();
+  const { canManageEmployees, isAdmin, canAccessNav } = useAttendancePermissions();
   const { data: employee, isLoading } = useEmployee(id);
-  const { data: records } = useRecordsList({ employeeId: id, limit: 30 });
   const deleteEmployee = useDeleteEmployee();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const canSeePayroll = canAccessNav('payrollHub');
+  const tabs = [
+    { id: 'profile', label: 'Personal details' },
+    { id: 'attendance', label: 'Attendance' },
+    ...(canSeePayroll ? [{ id: 'payroll', label: 'Payroll' }] : []),
+  ];
+
+  // The tab lives in the URL alongside the attendance section's ?month=, so a link to a
+  // specific tab (and month) survives a refresh and can be shared.
+  const tabParam = searchParams.get('tab');
+  const requested = TAB_IDS.includes(tabParam as TabId) ? (tabParam as TabId) : 'profile';
+  const activeTab = requested === 'payroll' && !canSeePayroll ? 'profile' : requested;
+
+  const setTab = (next: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('tab', next);
+    setSearchParams(params, { replace: true });
+  };
 
   if (isLoading) return <p className="text-slate-500">Loading...</p>;
   if (!employee) return <p className="text-slate-500">Employee not found.</p>;
@@ -57,102 +77,16 @@ export function AttendanceEmployeeDetail() {
           </div>
         )}
       </div>
-      <Card className="mb-6">
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-          <Field label="Phone" value={employee.phone} />
-          <Field label="Email" value={employee.email} />
-          <Field label="Designation" value={employee.designation} />
-          <Field label="Status" value={employee.status} capitalize />
-          <Field
-            label="Pay"
-            value={`${employee.payType ?? 'hourly'}${employee.payRate ? ` · ₹${employee.payRate}` : ' · not set'}`}
-            capitalize
-          />
-          <Field
-            label="App login"
-            value={
-              employee.userId && typeof employee.userId === 'object'
-                ? `${employee.userId.fullName} (${employee.userId.email})`
-                : 'Not linked'
-            }
-          />
-          <Field label="Date of joining" value={fmtDate(employee.dateOfJoining)} />
-          <Field label="Date of birth" value={fmtDate(employee.dateOfBirth)} />
-          <Field label="Gender" value={employee.gender} capitalize />
-          <Field label="Marital status" value={employee.maritalStatus} capitalize />
-          <Field label="Blood group" value={employee.bloodGroup} />
-          <Field label="Address" value={employee.address} />
-        </dl>
-      </Card>
 
-      {(employee.aadhaarNumber ||
-        employee.panNumber ||
-        employee.uanNumber ||
-        employee.esicNumber ||
-        employee.aadhaarFrontDocUrl ||
-        employee.aadhaarBackDocUrl ||
-        employee.panDocUrl) && (
-        <Card className="mb-6">
-          <h2 className="mb-3 font-semibold text-slate-800">Identity documents</h2>
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-            <Field label="Aadhaar" value={employee.aadhaarNumber} />
-            <Field label="PAN" value={employee.panNumber} />
-            <Field label="UAN (PF)" value={employee.uanNumber} />
-            <Field label="ESIC" value={employee.esicNumber} />
-          </dl>
-          {(employee.aadhaarFrontDocUrl || employee.aadhaarBackDocUrl || employee.panDocUrl) && (
-            <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-              {employee.aadhaarFrontDocUrl && <DocLink label="Aadhaar front" url={employee.aadhaarFrontDocUrl} />}
-              {employee.aadhaarBackDocUrl && <DocLink label="Aadhaar back" url={employee.aadhaarBackDocUrl} />}
-              {employee.panDocUrl && <DocLink label="PAN card" url={employee.panDocUrl} />}
-            </div>
-          )}
-        </Card>
+      <AttendanceSectionTabs tabs={tabs} active={activeTab} onChange={setTab} />
+
+      {activeTab === 'profile' && <EmployeeProfileSection employee={employee} />}
+      {activeTab === 'attendance' && id && (
+        <EmployeeAttendanceSection employeeId={id} employeeName={employee.fullName} />
       )}
-
-      {(employee.bankAccountNumber || employee.bankIfsc || employee.bankName) && (
-        <Card className="mb-6">
-          <h2 className="mb-3 font-semibold text-slate-800">Bank details</h2>
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-            <Field label="Account number" value={employee.bankAccountNumber} />
-            <Field label="IFSC" value={employee.bankIfsc} />
-            <Field label="Bank" value={employee.bankName} />
-          </dl>
-        </Card>
+      {activeTab === 'payroll' && id && (
+        <EmployeePayrollSection employeeId={id} employeeCode={employee.employeeCode} />
       )}
-
-      {(employee.emergencyContactName || employee.emergencyContactPhone) && (
-        <Card className="mb-6">
-          <h2 className="mb-3 font-semibold text-slate-800">Emergency contact</h2>
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-            <Field label="Name" value={employee.emergencyContactName} />
-            <Field label="Phone" value={employee.emergencyContactPhone} />
-            <Field label="Relationship" value={employee.emergencyContactRelation} />
-          </dl>
-        </Card>
-      )}
-      {id && <EmployeeAttendanceSection employeeId={id} employeeName={employee.fullName} />}
-
-      <Card>
-        <h2 className="mb-4 font-semibold text-slate-800">Recent attendance</h2>
-        <DataTable<AttendanceRecord>
-          columns={[
-            { key: 'date', label: 'Date', render: (r) => r.workDate },
-            { key: 'in', label: 'In', render: (r) => r.punchIn ? new Date(r.punchIn.at).toLocaleString() : '—' },
-            { key: 'out', label: 'Out', render: (r) => r.punchOut ? new Date(r.punchOut.at).toLocaleString() : '—' },
-            { key: 'worked', label: 'Worked (min)', render: (r) => r.workedMinutes },
-            { key: 'status', label: 'Status', render: (r) => <AttendanceStatusBadge status={r.status} /> },
-          ]}
-          data={records?.data ?? []}
-          rowKey={(r) => r._id}
-          emptyMessage="No records yet."
-          renderActions={(r) => (
-            <Link to={`/dashboard/attendance/records?highlight=${r._id}`} className="text-sm text-[#305dff] hover:underline">
-              Details
-            </Link>
-          )}
-        />
-      </Card>
 
       {deleteOpen && (
         <div
@@ -193,30 +127,4 @@ export function AttendanceEmployeeDetail() {
       )}
     </div>
   );
-}
-
-function DocLink({ label, url }: { label: string; url: string }) {
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:border-[#305dff] hover:text-[#305dff]"
-    >
-      <FiFileText className="size-4" /> {label}
-    </a>
-  );
-}
-
-function Field({ label, value, capitalize }: { label: string; value?: string | null; capitalize?: boolean }) {
-  return (
-    <div>
-      <dt className="text-slate-500">{label}</dt>
-      <dd className={capitalize ? 'capitalize' : undefined}>{value || '—'}</dd>
-    </div>
-  );
-}
-
-function fmtDate(iso?: string): string {
-  return iso ? new Date(iso).toLocaleDateString() : '';
 }
