@@ -28,11 +28,11 @@ const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
 function matchesStatus(row: AttendanceDayEmployee, filter: StatusFilter): boolean {
   switch (filter) {
     case 'present':
-      return row.type === 'worked' || row.type === 'worked_open';
+      return row.type === 'worked' || row.type === 'worked_open' || row.type === 'half_day' || row.type === 'late';
     case 'absent':
       return row.type === 'absent';
     case 'late':
-      return row.lateMinutes > 0;
+      return row.type === 'late' || row.lateMinutes > 0;
     case 'flagged':
       return row.recordStatus === 'flagged';
     case 'off':
@@ -165,6 +165,9 @@ export function AttendanceCalendar() {
               {counts && (
                 <div className="mb-4 flex flex-wrap gap-2 text-xs">
                   <Pill label="Present" value={counts.presentDays} cls="bg-emerald-100 text-emerald-800" />
+                  {'halfDayCount' in counts && (counts as { halfDayCount?: number }).halfDayCount! > 0 && (
+                    <Pill label="Half day" value={(counts as { halfDayCount?: number }).halfDayCount!} cls="bg-yellow-100 text-yellow-800" />
+                  )}
                   <Pill label="Absent" value={counts.absentDays} cls="bg-rose-100 text-rose-800" />
                   <Pill label="Late" value={counts.lateCount} cls="bg-amber-100 text-amber-800" />
                   <Pill label="Flagged" value={counts.flaggedCount} cls="bg-orange-100 text-orange-800" />

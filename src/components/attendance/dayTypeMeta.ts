@@ -21,6 +21,18 @@ export const DAY_TYPE_META: Record<DayType, { label: string; code: string; cls: 
     cls: 'bg-amber-100 text-amber-800',
     cell: 'bg-amber-100 text-amber-900 border-amber-300',
   },
+  half_day: {
+    label: 'Half day',
+    code: '½',
+    cls: 'bg-yellow-100 text-yellow-800',
+    cell: 'bg-yellow-100 text-yellow-900 border-yellow-300',
+  },
+  late: {
+    label: 'Late',
+    code: 'L',
+    cls: 'bg-orange-100 text-orange-800',
+    cell: 'bg-orange-100 text-orange-900 border-orange-300',
+  },
   paid_holiday: {
     label: 'Paid holiday',
     code: 'H',
@@ -69,6 +81,8 @@ export const DAY_TYPE_META: Record<DayType, { label: string; code: string; cls: 
 export const DAY_TYPE_LEGEND: { type: DayType; label: string }[] = [
   { type: 'worked', label: 'Present' },
   { type: 'worked_open', label: 'No punch-out' },
+  { type: 'half_day', label: 'Half day' },
+  { type: 'late', label: 'Late' },
   { type: 'absent', label: 'Absent' },
   { type: 'week_off_unpaid', label: 'Week off' },
   { type: 'paid_holiday', label: 'Holiday' },

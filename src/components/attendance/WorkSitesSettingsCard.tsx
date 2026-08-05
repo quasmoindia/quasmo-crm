@@ -28,11 +28,23 @@ export function WorkSitesSettingsCard({ canEdit, isAdmin, maxGpsAccuracyMeters }
     latitude: '',
     longitude: '',
     radiusMeters: '150',
+    overrideLunch: false,
+    lunchBreakStart: '13:30',
+    lunchBreakEnd: '14:00',
   });
 
   const openNew = () => {
     setEditing({ _id: '', name: '', latitude: 0, longitude: 0, radiusMeters: 150, isActive: true } as WorkSite);
-    setForm({ name: '', address: '', latitude: '', longitude: '', radiusMeters: '150' });
+    setForm({
+      name: '',
+      address: '',
+      latitude: '',
+      longitude: '',
+      radiusMeters: '150',
+      overrideLunch: false,
+      lunchBreakStart: '13:30',
+      lunchBreakEnd: '14:00',
+    });
     setGeoError(null);
   };
 
@@ -44,6 +56,9 @@ export function WorkSitesSettingsCard({ canEdit, isAdmin, maxGpsAccuracyMeters }
       latitude: String(site.latitude),
       longitude: String(site.longitude),
       radiusMeters: String(site.radiusMeters),
+      overrideLunch: site.lunchBreakEnabled != null,
+      lunchBreakStart: site.lunchBreakStart ?? '13:30',
+      lunchBreakEnd: site.lunchBreakEnd ?? '14:00',
     });
     setGeoError(null);
   };
@@ -86,6 +101,9 @@ export function WorkSitesSettingsCard({ canEdit, isAdmin, maxGpsAccuracyMeters }
       longitude: lng,
       radiusMeters: parseInt(form.radiusMeters, 10) || 150,
       isActive: true,
+      lunchBreakEnabled: form.overrideLunch ? true : undefined,
+      lunchBreakStart: form.overrideLunch ? form.lunchBreakStart : undefined,
+      lunchBreakEnd: form.overrideLunch ? form.lunchBreakEnd : undefined,
     };
     if (editing?._id) {
       await updateMutation.mutateAsync({ id: editing._id, payload });
@@ -111,6 +129,7 @@ export function WorkSitesSettingsCard({ canEdit, isAdmin, maxGpsAccuracyMeters }
         columns={[
           { key: 'name', label: 'Name', render: (s) => s.name },
           { key: 'address', label: 'Address', render: (s) => s.address ?? '—' },
+          { key: 'lunch', label: 'Lunch timing', render: (s) => s.lunchBreakEnabled !== false ? `${s.lunchBreakStart ?? '13:30'} – ${s.lunchBreakEnd ?? '14:00'}` : 'Disabled' },
           { key: 'coords', label: 'Lat / Lng', render: (s) => `${s.latitude.toFixed(5)}, ${s.longitude.toFixed(5)}` },
           { key: 'radius', label: 'Radius (m)', render: (s) => s.radiusMeters },
         ]}
@@ -148,13 +167,42 @@ export function WorkSitesSettingsCard({ canEdit, isAdmin, maxGpsAccuracyMeters }
                 Use current location (GPS)
               </Button>
               {geoError && <p className="text-xs text-rose-600">{geoError}</p>}
-              <Input label="Latitude" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: e.target.value })} />
-              <Input label="Longitude" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} />
-              <Input
-                label="Geofence radius (meters)"
-                value={form.radiusMeters}
-                onChange={(e) => setForm({ ...form, radiusMeters: e.target.value })}
-              />
+               <div className="grid grid-cols-3 gap-2">
+                <Input label="Latitude" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: e.target.value })} />
+                <Input label="Longitude" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} />
+                <Input label="Radius (m)" type="number" value={form.radiusMeters} onChange={(e) => setForm({ ...form, radiusMeters: e.target.value })} />
+              </div>
+
+              <div className="border-t border-slate-200 pt-3">
+                <h4 className="font-medium text-xs text-slate-800 mb-1">Worksite Lunch Break Timing</h4>
+                <p className="text-[11px] text-slate-500 mb-2">
+                  Configure lunch timing specific to employees working at this site. Punches in this window will snap to the lunch end time.
+                </p>
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.overrideLunch}
+                    onChange={(e) => setForm({ ...form, overrideLunch: e.target.checked })}
+                  />
+                  Enable Lunch Break for this site
+                </label>
+                {form.overrideLunch && (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Input
+                      label="Lunch start (HH:MM)"
+                      type="time"
+                      value={form.lunchBreakStart}
+                      onChange={(e) => setForm({ ...form, lunchBreakStart: e.target.value })}
+                    />
+                    <Input
+                      label="Lunch end (HH:MM)"
+                      type="time"
+                      value={form.lunchBreakEnd}
+                      onChange={(e) => setForm({ ...form, lunchBreakEnd: e.target.value })}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
             <div className="mt-4 flex gap-2">
               <Button onClick={save} loading={createMutation.isPending || updateMutation.isPending}>

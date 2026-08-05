@@ -21,6 +21,9 @@ export interface WorkSite {
   longitude: number;
   radiusMeters: number;
   isActive: boolean;
+  lunchBreakEnabled?: boolean;
+  lunchBreakStart?: string;
+  lunchBreakEnd?: string;
 }
 
 export type PayType = 'hourly' | 'daily' | 'monthly';
@@ -163,6 +166,10 @@ export interface AttendanceSettings {
   esiGrossCeiling: number;
   ptEnabled: boolean;
   ptAmount: number;
+  // Lunch break
+  lunchBreakEnabled: boolean;
+  lunchBreakStart: string;
+  lunchBreakEnd: string;
   weeklyOffDays: number[];
   paidWeeklyOff: boolean;
   faceRecognitionEnabled?: boolean;
@@ -441,6 +448,8 @@ export interface PayrollAdjustment {
 export type DayType =
   | 'worked'
   | 'worked_open'
+  | 'half_day'
+  | 'late'
   | 'paid_holiday'
   | 'unpaid_holiday'
   | 'paid_leave'

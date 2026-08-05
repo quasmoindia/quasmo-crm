@@ -51,6 +51,9 @@ export function AttendanceSettings() {
     esiGrossCeiling: '21000',
     ptEnabled: false,
     ptAmount: '200',
+    lunchBreakEnabled: false,
+    lunchBreakStart: '13:30',
+    lunchBreakEnd: '14:00',
     weeklyOffDays: [0] as number[],
     paidWeeklyOff: true,
   });
@@ -72,6 +75,9 @@ export function AttendanceSettings() {
         esiGrossCeiling: String(settings.esiGrossCeiling ?? 21000),
         ptEnabled: settings.ptEnabled ?? false,
         ptAmount: String(settings.ptAmount ?? 200),
+        lunchBreakEnabled: settings.lunchBreakEnabled ?? false,
+        lunchBreakStart: settings.lunchBreakStart ?? '13:30',
+        lunchBreakEnd: settings.lunchBreakEnd ?? '14:00',
         weeklyOffDays: settings.weeklyOffDays ?? [0],
         paidWeeklyOff: settings.paidWeeklyOff ?? true,
       });
@@ -125,6 +131,9 @@ export function AttendanceSettings() {
       esiGrossCeiling: parseFloat(policy.esiGrossCeiling) || 0,
       ptEnabled: policy.ptEnabled,
       ptAmount: parseFloat(policy.ptAmount) || 0,
+      lunchBreakEnabled: policy.lunchBreakEnabled,
+      lunchBreakStart: policy.lunchBreakStart,
+      lunchBreakEnd: policy.lunchBreakEnd,
       weeklyOffDays: policy.weeklyOffDays,
       paidWeeklyOff: policy.paidWeeklyOff,
     });
@@ -206,6 +215,61 @@ export function AttendanceSettings() {
         {canManageSitesShifts && (
           <Button className="mt-5" onClick={savePolicy} loading={updateSettings.isPending}>
             Save policies
+          </Button>
+        )}
+      </Card>
+
+      <Card>
+        <h2 className="font-semibold text-slate-800">Lunch time &amp; break hours</h2>
+        <p className="mt-1 mb-4 text-sm text-slate-500">
+          Set standard lunch timing. Lunch break hours are excluded from payroll and working hours.
+          Punch-ins during lunch are automatically set to the end of lunch time (e.g. 1:44 PM punch-in applies as 2:00 PM).
+        </p>
+        <div className="space-y-4 max-w-2xl">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={policy.lunchBreakEnabled}
+              onChange={(e) => setPolicy({ ...policy, lunchBreakEnabled: e.target.checked })}
+              disabled={!canManageSitesShifts}
+            />
+            <span>
+              Enable lunch break deduction
+              <span className="mt-0.5 block text-xs text-slate-400">
+                On: lunch window is automatically excluded from daily worked hours. Punches between lunch start &amp; end snap to lunch end.
+              </span>
+            </span>
+          </label>
+
+          {policy.lunchBreakEnabled && (
+            <div className="grid gap-5 sm:grid-cols-2 pt-2">
+              <div>
+                <Input
+                  label="Lunch start time"
+                  type="time"
+                  value={policy.lunchBreakStart}
+                  onChange={(e) => setPolicy({ ...policy, lunchBreakStart: e.target.value })}
+                  disabled={!canManageSitesShifts}
+                />
+                <p className="mt-1 text-xs text-slate-400">Default: 13:30 (1:30 PM)</p>
+              </div>
+              <div>
+                <Input
+                  label="Lunch end time"
+                  type="time"
+                  value={policy.lunchBreakEnd}
+                  onChange={(e) => setPolicy({ ...policy, lunchBreakEnd: e.target.value })}
+                  disabled={!canManageSitesShifts}
+                />
+                <p className="mt-1 text-xs text-slate-400">Default: 14:00 (2:00 PM)</p>
+              </div>
+            </div>
+          )}
+        </div>
+        {canManageSitesShifts && (
+          <Button className="mt-5" onClick={savePolicy} loading={updateSettings.isPending}>
+            Save lunch settings
           </Button>
         )}
       </Card>
