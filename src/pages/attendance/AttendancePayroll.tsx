@@ -163,7 +163,7 @@ export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) 
               <FiFileText className="size-4" /> Download payslips (PDF)
             </Button>
             <Button onClick={handleExport} loading={exporting}>
-              <FiDownload className="size-4" /> Export CSV
+              <FiDownload className="size-4" /> Export Master Sheet (CSV)
             </Button>
           </div>
         )}
@@ -215,17 +215,46 @@ export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) 
           columns={[
             { key: 'code', label: 'Code', render: (r) => <span className="font-medium">{r.employeeCode}</span> },
             { key: 'name', label: 'Name', render: (r) => r.fullName },
-            { key: 'days', label: 'Days', render: (r) => r.daysPresent },
+            {
+              key: 'attendance',
+              label: 'Attendance (Days)',
+              render: (r) => (
+                <div className="text-xs">
+                  <span className="font-semibold text-emerald-800">{r.daysPresent} Present</span>
+                  {(r.halfDays ?? 0) > 0 || (r.lateDays ?? 0) > 0 ? (
+                    <span className="block text-[11px] text-slate-500">
+                      {(r.fullDays ?? 0) > 0 ? `${r.fullDays} full` : ''}
+                      {(r.halfDays ?? 0) > 0 ? `${(r.fullDays ?? 0) > 0 ? ', ' : ''}${r.halfDays} half` : ''}
+                      {(r.lateDays ?? 0) > 0 ? `${((r.fullDays ?? 0) > 0 || (r.halfDays ?? 0) > 0) ? ', ' : ''}${r.lateDays} late` : ''}
+                    </span>
+                  ) : null}
+                </div>
+              ),
+            },
+            {
+              key: 'off',
+              label: 'Leave / Off',
+              render: (r) => (
+                <div className="text-xs text-slate-600">
+                  {r.paidLeaveDays > 0 || (r.unpaidLeaveDays ?? 0) > 0 ? (
+                    <span>{r.paidLeaveDays + (r.unpaidLeaveDays ?? 0)} leave </span>
+                  ) : null}
+                  {r.weeklyOffDays > 0 ? <span>{r.weeklyOffDays} W/O </span> : null}
+                  {r.holidayDays > 0 ? <span>{r.holidayDays} holiday</span> : null}
+                  {r.paidLeaveDays === 0 && (r.unpaidLeaveDays ?? 0) === 0 && r.weeklyOffDays === 0 && r.holidayDays === 0 ? '—' : null}
+                </div>
+              ),
+            },
             { key: 'worked', label: 'Worked', render: (r) => hoursLabel(r.totalMinutes) },
             {
               key: 'ot',
               label: 'OT',
               render: (r) =>
-                r.overtimeHours > 0 ? <span className="text-amber-700">{hoursLabel(Math.round(r.overtimeHours * 60))}</span> : '—',
+                r.overtimeHours > 0 ? <span className="text-amber-700 font-medium">{hoursLabel(Math.round(r.overtimeHours * 60))}</span> : '—',
             },
             { key: 'gross', label: 'Gross', render: (r) => inr(r.gross) },
             { key: 'ded', label: 'Deductions', render: (r) => (r.totalDeductions > 0 ? <span className="text-rose-600">−{inr(r.totalDeductions)}</span> : '—') },
-            { key: 'net', label: 'Net pay', render: (r) => <span className="font-semibold">{inr(r.netPay)}</span> },
+            { key: 'net', label: 'Net pay', render: (r) => <span className="font-semibold text-slate-900">{inr(r.netPay)}</span> },
           ]}
           data={filteredRows}
           rowKey={(r) => r.employeeId}
