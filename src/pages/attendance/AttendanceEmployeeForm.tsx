@@ -62,8 +62,15 @@ export function AttendanceEmployeeForm() {
     emergencyContactPhone: '',
     emergencyContactRelation: '',
     pfApplicable: true,
+    pfMode: 'percentage' as 'percentage' | 'fixed',
+    pfFixedAmount: '',
     esiApplicable: true,
+    esiMode: 'percentage' as 'percentage' | 'fixed',
+    esiFixedAmount: '',
     ptApplicable: true,
+    ptMode: 'default' as 'default' | 'fixed',
+    ptFixedAmount: '',
+    tdsAmount: '',
   });
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -111,8 +118,15 @@ export function AttendanceEmployeeForm() {
       emergencyContactPhone: existing.emergencyContactPhone ?? '',
       emergencyContactRelation: existing.emergencyContactRelation ?? '',
       pfApplicable: existing.pfApplicable ?? true,
+      pfMode: existing.pfMode ?? 'percentage',
+      pfFixedAmount: existing.pfFixedAmount != null ? String(existing.pfFixedAmount) : '',
       esiApplicable: existing.esiApplicable ?? true,
+      esiMode: existing.esiMode ?? 'percentage',
+      esiFixedAmount: existing.esiFixedAmount != null ? String(existing.esiFixedAmount) : '',
       ptApplicable: existing.ptApplicable ?? true,
+      ptMode: existing.ptMode ?? 'default',
+      ptFixedAmount: existing.ptFixedAmount != null ? String(existing.ptFixedAmount) : '',
+      tdsAmount: existing.tdsAmount != null ? String(existing.tdsAmount) : '',
     });
     if (existing.referencePhotoUrl) setPhotoPreview(existing.referencePhotoUrl);
     setAadhaarFrontDocUrl(existing.aadhaarFrontDocUrl ?? null);
@@ -143,6 +157,10 @@ export function AttendanceEmployeeForm() {
       maritalStatus: form.maritalStatus || undefined,
       dateOfJoining: form.dateOfJoining || undefined,
       dateOfBirth: form.dateOfBirth || undefined,
+      pfFixedAmount: form.pfFixedAmount ? Number(form.pfFixedAmount) : 0,
+      esiFixedAmount: form.esiFixedAmount ? Number(form.esiFixedAmount) : 0,
+      ptFixedAmount: form.ptFixedAmount ? Number(form.ptFixedAmount) : 0,
+      tdsAmount: form.tdsAmount ? Number(form.tdsAmount) : 0,
     };
     try {
       let targetId = employeeId;
@@ -362,23 +380,139 @@ export function AttendanceEmployeeForm() {
         </div>
 
         <Card>
-          <SectionTitle title="Statutory deductions" hint="Applies the company-wide PF/ESI/PT rules (set in Settings). Untick to exempt this employee." />
-          <div className="flex flex-wrap gap-3">
-            {([
-              ['pfApplicable', 'Provident Fund (PF)'],
-              ['esiApplicable', 'ESI'],
-              ['ptApplicable', 'Professional Tax'],
-            ] as const).map(([key, label]) => (
-              <label
-                key={key}
-                className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
-                  form[key] ? 'border-[#305dff] bg-blue-50 text-slate-800' : 'border-slate-200 text-slate-600'
-                }`}
-              >
-                <input type="checkbox" checked={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.checked })} />
-                {label}
+          <SectionTitle
+            title="Statutory & Tax Deductions"
+            hint="Configure PF, ESI, Professional Tax, and Income Tax / TDS deductions per employee. Supports percentage calculation or fixed monthly amounts (e.g. ₹1800, ₹1960, ₹1990)."
+          />
+          <div className="space-y-5">
+            {/* PF Section */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+              <label className="flex cursor-pointer items-center gap-2 font-semibold text-slate-800 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.pfApplicable}
+                  onChange={(e) => setForm({ ...form, pfApplicable: e.target.checked })}
+                />
+                Deduct Provident Fund (PF)
               </label>
-            ))}
+              {form.pfApplicable && (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 pt-2 border-t border-slate-200/60">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">PF Calculation Mode</label>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#305dff] focus:outline-none"
+                      value={form.pfMode}
+                      onChange={(e) => setForm({ ...form, pfMode: e.target.value as 'percentage' | 'fixed' })}
+                    >
+                      <option value="percentage">Percentage (12% of Basic up to wage ceiling)</option>
+                      <option value="fixed">Fixed Monthly Amount (e.g. ₹1800, ₹1960, ₹1990)</option>
+                    </select>
+                  </div>
+                  {form.pfMode === 'fixed' && (
+                    <div>
+                      <Input
+                        label="PF Fixed Amount (₹)"
+                        type="number"
+                        value={form.pfFixedAmount}
+                        onChange={(e) => setForm({ ...form, pfFixedAmount: e.target.value })}
+                        placeholder="e.g. 1800, 1960, 1990"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ESI Section */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+              <label className="flex cursor-pointer items-center gap-2 font-semibold text-slate-800 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.esiApplicable}
+                  onChange={(e) => setForm({ ...form, esiApplicable: e.target.checked })}
+                />
+                Deduct Employees' State Insurance (ESI)
+              </label>
+              {form.esiApplicable && (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 pt-2 border-t border-slate-200/60">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">ESI Calculation Mode</label>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#305dff] focus:outline-none"
+                      value={form.esiMode}
+                      onChange={(e) => setForm({ ...form, esiMode: e.target.value as 'percentage' | 'fixed' })}
+                    >
+                      <option value="percentage">Percentage (0.75% of Gross if ≤ ₹21,000)</option>
+                      <option value="fixed">Fixed Monthly Amount (e.g. ₹150, ₹200)</option>
+                    </select>
+                  </div>
+                  {form.esiMode === 'fixed' && (
+                    <div>
+                      <Input
+                        label="ESI Fixed Amount (₹)"
+                        type="number"
+                        value={form.esiFixedAmount}
+                        onChange={(e) => setForm({ ...form, esiFixedAmount: e.target.value })}
+                        placeholder="e.g. 150, 200"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Professional Tax Section */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+              <label className="flex cursor-pointer items-center gap-2 font-semibold text-slate-800 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.ptApplicable}
+                  onChange={(e) => setForm({ ...form, ptApplicable: e.target.checked })}
+                />
+                Deduct Professional Tax (PT)
+              </label>
+              {form.ptApplicable && (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 pt-2 border-t border-slate-200/60">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">PT Mode</label>
+                    <select
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#305dff] focus:outline-none"
+                      value={form.ptMode}
+                      onChange={(e) => setForm({ ...form, ptMode: e.target.value as 'default' | 'fixed' })}
+                    >
+                      <option value="default">Default Company Setting Amount</option>
+                      <option value="fixed">Fixed Monthly Amount (e.g. ₹200)</option>
+                    </select>
+                  </div>
+                  {form.ptMode === 'fixed' && (
+                    <div>
+                      <Input
+                        label="PT Fixed Amount (₹)"
+                        type="number"
+                        value={form.ptFixedAmount}
+                        onChange={(e) => setForm({ ...form, ptFixedAmount: e.target.value })}
+                        placeholder="e.g. 200"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Custom TDS Section */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+              <h4 className="font-semibold text-slate-800 text-sm mb-0.5">Income Tax / TDS / Custom Monthly Tax Deduction</h4>
+              <p className="text-xs text-slate-500 mb-3">Fixed monthly tax amount deducted from salary during payroll processing.</p>
+              <div className="max-w-xs">
+                <Input
+                  label="Monthly TDS Amount (₹)"
+                  type="number"
+                  value={form.tdsAmount}
+                  onChange={(e) => setForm({ ...form, tdsAmount: e.target.value })}
+                  placeholder="0 (Optional)"
+                />
+              </div>
+            </div>
           </div>
         </Card>
       </div>

@@ -65,8 +65,15 @@ export interface Employee {
   emergencyContactPhone?: string;
   emergencyContactRelation?: string;
   pfApplicable?: boolean;
+  pfMode?: 'percentage' | 'fixed';
+  pfFixedAmount?: number;
   esiApplicable?: boolean;
+  esiMode?: 'percentage' | 'fixed';
+  esiFixedAmount?: number;
   ptApplicable?: boolean;
+  ptMode?: 'default' | 'fixed';
+  ptFixedAmount?: number;
+  tdsAmount?: number;
   createdAt: string;
   updatedAt: string;
 }
