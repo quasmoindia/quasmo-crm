@@ -27,6 +27,15 @@ export function AttendanceSettings() {
     faceLivenessThreshold: '0',
   });
 
+  const [employer, setEmployer] = useState({
+    employerName: '',
+    employerAddressLine1: '',
+    employerAddressLine2: '',
+    employerPfCode: '',
+    employerEsiCode: '',
+    employerLogoUrl: '',
+  });
+
   const [policy, setPolicy] = useState({
     maxGpsAccuracyMeters: '100',
     otpExpiryMinutes: '10',
@@ -42,6 +51,9 @@ export function AttendanceSettings() {
     esiGrossCeiling: '21000',
     ptEnabled: false,
     ptAmount: '200',
+    lunchBreakEnabled: false,
+    lunchBreakStart: '13:30',
+    lunchBreakEnd: '14:00',
     weeklyOffDays: [0] as number[],
     paidWeeklyOff: true,
   });
@@ -63,6 +75,9 @@ export function AttendanceSettings() {
         esiGrossCeiling: String(settings.esiGrossCeiling ?? 21000),
         ptEnabled: settings.ptEnabled ?? false,
         ptAmount: String(settings.ptAmount ?? 200),
+        lunchBreakEnabled: settings.lunchBreakEnabled ?? false,
+        lunchBreakStart: settings.lunchBreakStart ?? '13:30',
+        lunchBreakEnd: settings.lunchBreakEnd ?? '14:00',
         weeklyOffDays: settings.weeklyOffDays ?? [0],
         paidWeeklyOff: settings.paidWeeklyOff ?? true,
       });
@@ -74,8 +89,20 @@ export function AttendanceSettings() {
         faceAntiSpoofThreshold: String(settings.faceAntiSpoofThreshold ?? 0.3),
         faceLivenessThreshold: String(settings.faceLivenessThreshold ?? 0),
       });
+      setEmployer({
+        employerName: settings.employerName ?? '',
+        employerAddressLine1: settings.employerAddressLine1 ?? '',
+        employerAddressLine2: settings.employerAddressLine2 ?? '',
+        employerPfCode: settings.employerPfCode ?? '',
+        employerEsiCode: settings.employerEsiCode ?? '',
+        employerLogoUrl: settings.employerLogoUrl ?? '',
+      });
     }
   }, [settings]);
+
+  const saveEmployer = async () => {
+    await updateSettings.mutateAsync(employer);
+  };
 
   const saveFace = async () => {
     await updateSettings.mutateAsync({
@@ -104,6 +131,9 @@ export function AttendanceSettings() {
       esiGrossCeiling: parseFloat(policy.esiGrossCeiling) || 0,
       ptEnabled: policy.ptEnabled,
       ptAmount: parseFloat(policy.ptAmount) || 0,
+      lunchBreakEnabled: policy.lunchBreakEnabled,
+      lunchBreakStart: policy.lunchBreakStart,
+      lunchBreakEnd: policy.lunchBreakEnd,
       weeklyOffDays: policy.weeklyOffDays,
       paidWeeklyOff: policy.paidWeeklyOff,
     });
@@ -185,6 +215,61 @@ export function AttendanceSettings() {
         {canManageSitesShifts && (
           <Button className="mt-5" onClick={savePolicy} loading={updateSettings.isPending}>
             Save policies
+          </Button>
+        )}
+      </Card>
+
+      <Card>
+        <h2 className="font-semibold text-slate-800">Lunch time &amp; break hours</h2>
+        <p className="mt-1 mb-4 text-sm text-slate-500">
+          Set standard lunch timing. Lunch break hours are excluded from payroll and working hours.
+          Punch-ins during lunch are automatically set to the end of lunch time (e.g. 1:44 PM punch-in applies as 2:00 PM).
+        </p>
+        <div className="space-y-4 max-w-2xl">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={policy.lunchBreakEnabled}
+              onChange={(e) => setPolicy({ ...policy, lunchBreakEnabled: e.target.checked })}
+              disabled={!canManageSitesShifts}
+            />
+            <span>
+              Enable lunch break deduction
+              <span className="mt-0.5 block text-xs text-slate-400">
+                On: lunch window is automatically excluded from daily worked hours. Punches between lunch start &amp; end snap to lunch end.
+              </span>
+            </span>
+          </label>
+
+          {policy.lunchBreakEnabled && (
+            <div className="grid gap-5 sm:grid-cols-2 pt-2">
+              <div>
+                <Input
+                  label="Lunch start time"
+                  type="time"
+                  value={policy.lunchBreakStart}
+                  onChange={(e) => setPolicy({ ...policy, lunchBreakStart: e.target.value })}
+                  disabled={!canManageSitesShifts}
+                />
+                <p className="mt-1 text-xs text-slate-400">Default: 13:30 (1:30 PM)</p>
+              </div>
+              <div>
+                <Input
+                  label="Lunch end time"
+                  type="time"
+                  value={policy.lunchBreakEnd}
+                  onChange={(e) => setPolicy({ ...policy, lunchBreakEnd: e.target.value })}
+                  disabled={!canManageSitesShifts}
+                />
+                <p className="mt-1 text-xs text-slate-400">Default: 14:00 (2:00 PM)</p>
+              </div>
+            </div>
+          )}
+        </div>
+        {canManageSitesShifts && (
+          <Button className="mt-5" onClick={savePolicy} loading={updateSettings.isPending}>
+            Save lunch settings
           </Button>
         )}
       </Card>
@@ -485,6 +570,68 @@ export function AttendanceSettings() {
         {canManageSitesShifts && (
           <Button className="mt-5" onClick={savePolicy} loading={updateSettings.isPending}>
             Save deduction settings
+          </Button>
+        )}
+      </Card>
+
+      <Card>
+        <h2 className="font-semibold text-slate-800">Employer details (payslips)</h2>
+        <p className="mt-1 mb-4 text-sm text-slate-500">
+          Printed as the letterhead on every payslip. Blank fields are left off the slip rather
+          than printed empty.
+        </p>
+        <div className="grid max-w-3xl gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Input
+              label="Company name"
+              value={employer.employerName}
+              onChange={(e) => setEmployer({ ...employer, employerName: e.target.value })}
+              placeholder="e.g. Quality Scientific & Mechanical Works"
+              disabled={!canManageSitesShifts}
+            />
+          </div>
+          <Input
+            label="Address line 1"
+            value={employer.employerAddressLine1}
+            onChange={(e) => setEmployer({ ...employer, employerAddressLine1: e.target.value })}
+            placeholder="Plot No. 84, HSIDC Industrial Area"
+            disabled={!canManageSitesShifts}
+          />
+          <Input
+            label="Address line 2"
+            value={employer.employerAddressLine2}
+            onChange={(e) => setEmployer({ ...employer, employerAddressLine2: e.target.value })}
+            placeholder="Ambala Cantt, Haryana 133001"
+            disabled={!canManageSitesShifts}
+          />
+          <Input
+            label="PF establishment code"
+            value={employer.employerPfCode}
+            onChange={(e) => setEmployer({ ...employer, employerPfCode: e.target.value })}
+            disabled={!canManageSitesShifts}
+          />
+          <Input
+            label="ESI establishment code"
+            value={employer.employerEsiCode}
+            onChange={(e) => setEmployer({ ...employer, employerEsiCode: e.target.value })}
+            disabled={!canManageSitesShifts}
+          />
+          <div className="sm:col-span-2">
+            <Input
+              label="Logo URL"
+              value={employer.employerLogoUrl}
+              onChange={(e) => setEmployer({ ...employer, employerLogoUrl: e.target.value })}
+              placeholder="https://..."
+              disabled={!canManageSitesShifts}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Must be publicly reachable — the PDF renderer fetches it at generation time.
+            </p>
+          </div>
+        </div>
+        {canManageSitesShifts && (
+          <Button className="mt-5" onClick={saveEmployer} loading={updateSettings.isPending}>
+            Save employer details
           </Button>
         )}
       </Card>

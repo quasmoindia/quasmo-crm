@@ -18,6 +18,9 @@ export const APPLIES_TO_LABELS: Record<AdjustmentAppliesTo, string> = {
   overtime: 'OT run',
 };
 
+export const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+export const round2 = (n: number) => Math.round(n * 100) / 100;
+
 export function payComponentLabel(component: PayComponent) {
   return PAY_COMPONENT_OPTIONS.find((option) => option.id === component)?.label ?? component;
 }

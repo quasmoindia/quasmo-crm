@@ -9,7 +9,6 @@ import {
   FiCheck,
   FiSettings,
   FiLayers,
-  FiUsers
 } from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -356,7 +355,7 @@ export function IdCards() {
           ) : employees.length === 0 ? (
             <div className="flex h-[32rem] flex-col items-center justify-center gap-4 rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50">
               <div className="flex size-16 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200">
-                <FiUsers className="size-8 text-slate-400" />
+                <FiUser className="size-8 text-slate-400" />
               </div>
               <div className="text-center">
                 <p className="text-base font-bold text-slate-800">No employees found</p>

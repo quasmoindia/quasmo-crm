@@ -21,6 +21,9 @@ export interface WorkSite {
   longitude: number;
   radiusMeters: number;
   isActive: boolean;
+  lunchBreakEnabled?: boolean;
+  lunchBreakStart?: string;
+  lunchBreakEnd?: string;
 }
 
 export type PayType = 'hourly' | 'daily' | 'monthly';
@@ -163,6 +166,10 @@ export interface AttendanceSettings {
   esiGrossCeiling: number;
   ptEnabled: boolean;
   ptAmount: number;
+  // Lunch break
+  lunchBreakEnabled: boolean;
+  lunchBreakStart: string;
+  lunchBreakEnd: string;
   weeklyOffDays: number[];
   paidWeeklyOff: boolean;
   faceRecognitionEnabled?: boolean;
@@ -171,6 +178,13 @@ export interface AttendanceSettings {
   faceAntiSpoofMode?: 'off' | 'record' | 'block';
   faceAntiSpoofThreshold?: number;
   faceLivenessThreshold?: number;
+  /** Employer identity printed as the payslip letterhead. */
+  employerName?: string;
+  employerAddressLine1?: string;
+  employerAddressLine2?: string;
+  employerPfCode?: string;
+  employerEsiCode?: string;
+  employerLogoUrl?: string;
 }
 
 export interface AttendanceDashboardHoliday {
@@ -352,18 +366,25 @@ export interface PayrollRow {
   department: string;
   payType: PayType;
   payRate: number;
+  totalDays?: number;
   daysPresent: number;
+  fullDays?: number;
+  halfDays?: number;
+  lateDays?: number;
+  absentDays?: number;
+  incompleteDays?: number;
+  paidLeaveDays: number;
+  unpaidLeaveDays?: number;
+  weeklyOffDays: number;
+  holidayDays: number;
   totalMinutes: number;
   totalHours: number;
   regularHours: number;
   overtimeHours: number;
   regularAmount: number;
   overtimeAmount: number;
-  paidLeaveDays: number;
   paidLeaveAmount: number;
-  weeklyOffDays: number;
   weeklyOffAmount: number;
-  holidayDays: number;
   holidayAmount: number;
   gross: number;
   pf: number;
@@ -434,6 +455,8 @@ export interface PayrollAdjustment {
 export type DayType =
   | 'worked'
   | 'worked_open'
+  | 'half_day'
+  | 'late'
   | 'paid_holiday'
   | 'unpaid_holiday'
   | 'paid_leave'
