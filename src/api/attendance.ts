@@ -770,6 +770,50 @@ export async function downloadPayrollExport(params: {
   return res.blob();
 }
 
+export async function downloadBankPayrollExport(params: {
+  dateFrom?: string;
+  dateTo?: string;
+  department?: string;
+  payComponent?: PayComponent;
+}) {
+  const token = localStorage.getItem('token');
+  const base = API_BASE_URL.replace(/\/$/, '');
+  const qs = new URLSearchParams();
+  if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
+  if (params.dateTo) qs.set('dateTo', params.dateTo);
+  if (params.department) qs.set('department', params.department);
+  if (params.payComponent) qs.set('payComponent', params.payComponent);
+  const q = qs.toString();
+  const url = `${base}/${BASE.replace(/^\//, '')}/reports/payroll/bank-export${q ? `?${q}` : ''}`;
+  const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error('Bank payroll export failed');
+  return res.blob();
+}
+
+export interface PayrollHealthResponse {
+  dateFrom: string;
+  dateTo: string;
+  isHealthy: boolean;
+  openPunchCount: number;
+  pendingLeaveCount: number;
+  zeroPayRateCount: number;
+  missingBankCount: number;
+  openPunches: Array<{ _id: string; employeeName: string; employeeCode: string; workDate: string }>;
+  pendingLeaves: Array<{ _id: string; employeeName: string; employeeCode: string; fromDate: string; toDate: string; type: string }>;
+  zeroPayRateEmployees: Array<{ _id: string; fullName: string; employeeCode: string }>;
+  missingBankAccounts: Array<{ _id: string; fullName: string; employeeCode: string }>;
+}
+
+export function usePayrollHealth(params?: { dateFrom?: string; dateTo?: string }) {
+  const queryParams: Record<string, string> = {};
+  if (params?.dateFrom) queryParams.dateFrom = params.dateFrom;
+  if (params?.dateTo) queryParams.dateTo = params.dateTo;
+  return useQuery({
+    queryKey: ['attendance', 'payroll', 'health', params],
+    queryFn: () => get<PayrollHealthResponse>(`${BASE}/reports/payroll/health`, { params: queryParams }),
+  });
+}
+
 export function useReportSummary(params?: { dateFrom?: string; dateTo?: string; department?: string }) {
   const queryParams: Record<string, string> = {};
   if (params?.dateFrom) queryParams.dateFrom = params.dateFrom;
