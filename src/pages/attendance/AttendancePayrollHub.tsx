@@ -39,12 +39,14 @@ export function AttendancePayrollHub() {
   }
 
   return (
-    <div>
-      <div className="mb-2">
-        <h1 className="text-2xl font-bold text-slate-800">Payroll</h1>
-        <p className="mt-1 text-sm text-slate-500">Run payroll and review attendance reports.</p>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payroll</h1>
+        <p className="text-sm text-slate-500 mt-0.5">Run payroll and review attendance reports.</p>
       </div>
-      <AttendanceSectionTabs tabs={tabs} active={section} onChange={(id) => setSection(id as PayrollHubSection)} />
+      {tabs.length > 1 && (
+        <AttendanceSectionTabs tabs={tabs} active={section} onChange={(id) => setSection(id as PayrollHubSection)} />
+      )}
       {section === 'payroll' ? <AttendancePayroll embedded /> : <AttendanceReports embedded />}
     </div>
   );

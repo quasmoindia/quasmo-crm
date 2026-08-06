@@ -6,12 +6,14 @@ import { Input } from '../../components/Input';
 import { DataTable } from '../../components/DataTable';
 import {
   downloadBulkPayslipsPdf,
+  downloadBankPayrollExport,
   downloadPayrollExport,
   downloadPayslipPdf,
   triggerBlobDownload,
   useCreateAdjustment,
   useDeleteAdjustment,
   usePayrollAdjustments,
+  usePayrollHealth,
   usePayrollReport,
 } from '../../api/attendance';
 import {
@@ -40,7 +42,7 @@ function hoursLabel(minutes: number) {
   return `${h}h ${m}m`;
 }
 
-export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) {
+export function AttendancePayroll(_props?: { embedded?: boolean }) {
   const { canExport, canManageEmployees } = useAttendancePermissions();
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = `${today.slice(0, 8)}01`;
@@ -50,7 +52,9 @@ export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) 
   const [search, setSearch] = useState('');
   const [payComponent, setPayComponent] = useState<PayComponent>('regular');
   const [exporting, setExporting] = useState(false);
+  const [exportingBank, setExportingBank] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [showGuide, setShowGuide] = useState(false);
   const [payslipRow, setPayslipRow] = useState<PayrollRow | null>(null);
   const [detailRow, setDetailRow] = useState<PayrollRow | null>(null);
   const [downloadingPayslips, setDownloadingPayslips] = useState(false);
@@ -62,6 +66,7 @@ export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) 
     department: department || undefined,
     payComponent,
   });
+  const { data: health } = usePayrollHealth({ dateFrom, dateTo });
 
   const month = dateFrom.slice(0, 7);
   const invalidRange = dateFrom > dateTo;
@@ -102,6 +107,24 @@ export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) 
     }
   };
 
+  const handleBankExport = async () => {
+    setExportingBank(true);
+    setExportError(null);
+    try {
+      const blob = await downloadBankPayrollExport({
+        dateFrom,
+        dateTo,
+        department: department || undefined,
+        payComponent,
+      });
+      triggerBlobDownload(blob, `bank-salary-payout-${dateFrom}-${dateTo}.csv`);
+    } catch {
+      setExportError('Bank payout sheet export failed. Try again or check your permissions.');
+    } finally {
+      setExportingBank(false);
+    }
+  };
+
   const handleBulkPayslips = async () => {
     setDownloadingPayslips(true);
     setPayslipDownloadError(null);
@@ -137,77 +160,192 @@ export function AttendancePayroll({ embedded = false }: { embedded?: boolean }) 
   const policy = data?.policy;
 
   return (
-    <div>
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {!embedded ? (
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">Payroll</h1>
-            <p className="text-sm text-slate-500">
-              Daily worked hours (rounded to 15 min) up to {policy?.standardHoursPerDay ?? 8}h are paid at the
-              normal rate; beyond that is
-              {policy?.overtimeEnabled === false ? ' also normal (OT off)' : ` overtime at ${policy?.overtimeMultiplier ?? 1.5}×`}
-              . Deductions &amp; rates are set in Settings.
-            </p>
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500">
-            Daily worked hours (rounded to 15 min) up to {policy?.standardHoursPerDay ?? 8}h are paid at the
-            normal rate; beyond that is
-            {policy?.overtimeEnabled === false ? ' also normal (OT off)' : ` overtime at ${policy?.overtimeMultiplier ?? 1.5}×`}
-            . Deductions &amp; rates are set in Settings.
-          </p>
-        )}
+    <div className="space-y-6">
+      {/* Top Action Toolbar */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-200/80">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-[#305dff] border border-blue-100">
+            <span className="size-1.5 rounded-full bg-[#305dff]" /> Monthly Payroll Run
+          </span>
+        </div>
         {canExport && (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => void handleBulkPayslips()} loading={downloadingPayslips}>
-              <FiFileText className="size-4" /> Download payslips (PDF)
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void handleBulkPayslips()}
+              loading={downloadingPayslips}
+              className="bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs text-xs py-2 px-3"
+            >
+              <FiFileText className="size-3.5 text-slate-500" /> Download Payslips (PDF)
             </Button>
-            <Button onClick={handleExport} loading={exporting}>
-              <FiDownload className="size-4" /> Export Master Sheet (CSV)
+            <Button
+              variant="outline"
+              onClick={() => void handleBankExport()}
+              loading={exportingBank}
+              className="bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs text-xs py-2 px-3"
+            >
+              <FiDownload className="size-3.5 text-emerald-600" /> Bank Payout Sheet (CSV)
+            </Button>
+            <Button
+              onClick={handleExport}
+              loading={exporting}
+              className="bg-gradient-to-r from-[#1e3a8a] to-[#305dff] text-white shadow-xs text-xs py-2 px-3.5 hover:opacity-95"
+            >
+              <FiDownload className="size-3.5" /> Export Master Sheet (CSV)
             </Button>
           </div>
         )}
       </div>
-      {payslipDownloadError && <p className="mb-3 text-sm text-rose-600">{payslipDownloadError}</p>}
 
-      <Card className="mb-4">
-        <p className="mb-3 text-sm font-semibold text-slate-700">Pay run type</p>
-        <div className="flex flex-wrap gap-2">
-          {PAY_COMPONENT_OPTIONS.map((option) => (
+      {/* Clock-out Disclaimer Banner */}
+      <div className="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-2.5 text-xs text-slate-700 shadow-sm">
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#305dff] text-white text-[10px] font-bold">
+          i
+        </span>
+        <span>
+          Daily worked hours up to {policy?.standardHoursPerDay ?? 8}h are paid at normal rate; beyond that is
+          {policy?.overtimeEnabled === false ? ' normal (OT off)' : ` overtime (${policy?.overtimeMultiplier ?? 1.5}×)`}.{' '}
+          <strong className="text-slate-900">Rule:</strong> Unclosed shifts without clock-out are calculated as{' '}
+          <span className="font-semibold text-rose-600">0 hours (₹0 pay)</span> until fixed in Records.
+        </span>
+      </div>
+
+      {/* Readiness Health Card */}
+      {health && (
+        <div
+          className={`rounded-2xl border p-4 shadow-sm transition ${
+            health.isHealthy
+              ? 'border-emerald-200/80 bg-gradient-to-br from-emerald-50/80 to-emerald-100/40 text-emerald-950'
+              : 'border-amber-200/80 bg-gradient-to-br from-amber-50/80 to-amber-100/40 text-amber-950'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div
+                className={`flex size-10 shrink-0 items-center justify-center rounded-xl font-bold text-lg shadow-sm ${
+                  health.isHealthy ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
+                }`}
+              >
+                {health.isHealthy ? '✓' : '!'}
+              </div>
+              <div>
+                <h3 className="font-bold text-base tracking-tight">
+                  {health.isHealthy ? 'Pre-Payroll Readiness Verified — Ready for Payout' : 'Payroll Readiness Review Needed'}
+                </h3>
+                <p className="text-xs opacity-90 mt-0.5">
+                  {health.isHealthy
+                    ? 'All attendance punches and leave requests are verified. You can safely generate payslips and bank payout sheets.'
+                    : 'Some attendance records or employee settings need your quick review before finalizing payout.'}
+                </p>
+              </div>
+            </div>
             <button
-              key={option.id}
               type="button"
-              onClick={() => setPayComponent(option.id)}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                payComponent === option.id
-                  ? 'bg-[#305dff] text-white'
-                  : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-              }`}
+              onClick={() => setShowGuide(!showGuide)}
+              className="text-xs font-semibold underline text-[#305dff] hover:opacity-80 self-start sm:self-center shrink-0"
             >
-              {option.label}
+              {showGuide ? 'Hide Guide' : '📘 Beginner Payroll Guide'}
             </button>
-          ))}
+          </div>
+
+          {!health.isHealthy && (
+            <div className="mt-3 flex flex-wrap gap-2 pt-3 border-t border-amber-200/60 text-xs font-medium">
+              {health.openPunchCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-rose-100 px-3 py-1.5 font-semibold text-rose-800 shadow-2xs">
+                  ⚠️ {health.openPunchCount} Unclosed Punch(es) (Not clocked out = 0 hours)
+                </span>
+              )}
+              {health.pendingLeaveCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-100 px-3 py-1.5 font-semibold text-amber-900 shadow-2xs">
+                  ⏳ {health.pendingLeaveCount} Pending Leave Request(s)
+                </span>
+              )}
+              {health.zeroPayRateCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-200 px-3 py-1.5 font-semibold text-slate-800 shadow-2xs">
+                  💰 {health.zeroPayRateCount} Employee(s) with Zero Salary Set
+                </span>
+              )}
+              {health.missingBankCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-100 px-3 py-1.5 font-semibold text-blue-900 shadow-2xs">
+                  🏦 {health.missingBankCount} Employee(s) Missing Bank Account / IFSC
+                </span>
+              )}
+            </div>
+          )}
         </div>
-        <p className="mt-3 text-sm text-slate-500">{PAY_COMPONENT_HINTS[payComponent]}</p>
+      )}
+
+      {/* Beginner Payroll Guide Card */}
+      {showGuide && (
+        <Card className="border-2 border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-white shadow-sm">
+          <h3 className="font-bold text-slate-900 text-base mb-2">💡 Payroll Simplified for Beginners</h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs text-slate-700">
+            <div className="rounded-xl bg-white p-3 border border-indigo-100/80 shadow-2xs">
+              <span className="font-bold text-slate-900 block mb-1">1. Gross Salary</span>
+              Total money earned = Regular Worked Hours + Paid Leaves + Overtime (1.5×) + Monthly Bonus.{' '}
+              <span className="text-rose-700 font-semibold">(Unclosed shift = 0 hours).</span>
+            </div>
+            <div className="rounded-xl bg-white p-3 border border-indigo-100/80 shadow-2xs">
+              <span className="font-bold text-slate-900 block mb-1">2. Statutory Deductions</span>
+              Mandatory government taxes (Provident Fund 12%/Fixed, ESI health 0.75%, Professional Tax).
+            </div>
+            <div className="rounded-xl bg-white p-3 border border-indigo-100/80 shadow-2xs">
+              <span className="font-bold text-slate-900 block mb-1">3. Salary Adjustments</span>
+              Add extra incentives/bonus or recover salary advances given to the employee earlier.
+            </div>
+            <div className="rounded-xl bg-white p-3 border border-indigo-100/80 shadow-2xs">
+              <span className="font-bold text-emerald-800 block mb-1">4. Net Take-Home Pay</span>
+              Gross Salary minus Deductions. This exact amount is deposited into the employee's bank account.
+            </div>
+          </div>
+        </Card>
+      )}
+      {payslipDownloadError && <p className="text-sm text-rose-600">{payslipDownloadError}</p>}
+
+      {/* Control & Filter Panel */}
+      <Card className="border-slate-200/80 shadow-xs">
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pay Run Component</p>
+              <p className="text-xs text-slate-400 mt-0.5">{PAY_COMPONENT_HINTS[payComponent]}</p>
+            </div>
+            <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200/60">
+              {PAY_COMPONENT_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setPayComponent(option.id)}
+                  className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                    payComponent === option.id
+                      ? 'bg-white text-[#305dff] shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Input label="From" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <Input label="To" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <Input label="Department" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Optional" />
+            <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, code, department" />
+          </div>
+          {invalidRange ? <p className="text-sm text-rose-600">Start date must be on or before the end date.</p> : null}
+          {error ? <p className="text-sm text-rose-600">Could not load payroll. Refresh the page or try another period.</p> : null}
+          {exportError ? <p className="text-sm text-rose-600">{exportError}</p> : null}
+        </div>
       </Card>
 
-      <Card className="mb-6">
-        <div className="grid gap-4 sm:grid-cols-4">
-          <Input label="From" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input label="To" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          <Input label="Department" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Optional" />
-          <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, code, department" />
-        </div>
-        {invalidRange ? <p className="mt-3 text-sm text-rose-600">Start date must be on or before the end date.</p> : null}
-        {error ? <p className="mt-3 text-sm text-rose-600">Could not load payroll. Refresh the page or try another period.</p> : null}
-        {exportError ? <p className="mt-3 text-sm text-rose-600">{exportError}</p> : null}
-      </Card>
-
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryTile label="In this run" value={String(filteredRows.length)} />
-        <SummaryTile label="Gross" value={inr(totals?.gross ?? 0)} />
-        <SummaryTile label="Deductions" value={inr(totals?.totalDeductions ?? 0)} />
-        <SummaryTile label="Net payout" value={inr(totals?.netPay ?? 0)} accent />
+      {/* KPI Headline Summary Tiles */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <SummaryTile label="In This Run" value={String(filteredRows.length)} hint="Active Employees" />
+        <SummaryTile label="Gross Earnings" value={inr(totals?.gross ?? 0)} hint="Wages + OT + Bonus" />
+        <SummaryTile label="Total Deductions" value={inr(totals?.totalDeductions ?? 0)} hint="PF + ESI + PT + Advances" />
+        <SummaryTile label="Net Salary Payout" value={inr(totals?.netPay ?? 0)} accent hint="Total Take-Home Bank Transfer" />
       </div>
 
       <Card>
@@ -345,11 +483,27 @@ function PayrollDetailModal({
   );
 }
 
-function SummaryTile({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function SummaryTile({ label, value, accent, hint }: { label: string; value: string; accent?: boolean; hint?: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className={`mt-1 text-2xl font-bold ${accent ? 'text-emerald-600' : 'text-slate-900'}`}>{value}</p>
+    <div
+      className={`relative overflow-hidden rounded-2xl border p-4 shadow-sm transition-all duration-300 hover:shadow-md ${
+        accent
+          ? 'border-emerald-200 bg-gradient-to-br from-emerald-500/10 via-emerald-50/40 to-white'
+          : 'border-slate-200/80 bg-white'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+        {accent && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />}
+      </div>
+      <p
+        className={`mt-2 text-2xl font-black tracking-tight ${
+          accent ? 'text-emerald-700 font-extrabold' : 'text-slate-900'
+        }`}
+      >
+        {value}
+      </p>
+      {hint && <p className="mt-1 text-[11px] font-medium text-slate-400">{hint}</p>}
     </div>
   );
 }
