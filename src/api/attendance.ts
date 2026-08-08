@@ -46,6 +46,11 @@ const BASE = '/attendance';
 const PUNCH_TOKEN_KEY = 'attendancePunchToken';
 const KIOSK_TOKEN_KEY = 'attendanceKioskToken';
 
+/** True when the employee still has an open punch-in session (not yet punched out). */
+export function hasOpenPunchSession(record?: AttendanceRecord | null): boolean {
+  return !!record?.sessions?.some((session) => session.in && !session.out);
+}
+
 export function getPunchToken(): string | null {
   return localStorage.getItem(PUNCH_TOKEN_KEY);
 }

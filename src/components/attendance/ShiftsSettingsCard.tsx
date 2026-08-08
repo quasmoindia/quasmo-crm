@@ -23,12 +23,12 @@ export function ShiftsSettingsCard({ canEdit, isAdmin }: ShiftsSettingsCardProps
     name: '',
     startTime: '09:00',
     endTime: '18:00',
-    graceMinutes: '15',
+    graceMinutes: '5',
     isDefault: false,
   });
 
   const openNew = () => {
-    setEditing({ _id: '', name: '', startTime: '09:00', endTime: '18:00', graceMinutes: 15, isDefault: false, isActive: true });
+    setEditing({ _id: '', name: '', startTime: '09:00', endTime: '18:00', graceMinutes: 5, isDefault: false, isActive: true });
     setForm({ name: '', startTime: '09:00', endTime: '18:00', graceMinutes: '15', isDefault: false });
   };
 

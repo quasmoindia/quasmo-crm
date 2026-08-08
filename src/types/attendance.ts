@@ -105,6 +105,7 @@ export interface AttendanceRecord {
   status: AttendanceRecordStatus;
   lateMinutes: number;
   workedMinutes: number;
+  otMinutes?: number;
   createdAt: string;
 }
 
@@ -242,6 +243,7 @@ export interface PunchShiftSummary {
   name: string;
   startTime: string;
   endTime: string;
+  crossesMidnight?: boolean;
   isDefault?: boolean;
 }
 
@@ -618,6 +620,8 @@ export interface PayrollDayDetail {
   date: string;
   day: string;
   type: DayType;
+  firstInAt?: string | null;
+  lastOutAt?: string | null;
   workedMinutes: number;
   regularMinutes: number;
   otMinutes: number;
