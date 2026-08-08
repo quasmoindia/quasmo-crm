@@ -14,6 +14,10 @@ function mins(m: number) {
   return `${h}h ${m % 60}m`;
 }
 
+function timeOnly(iso?: string | null) {
+  return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+}
+
 /**
  * Read-only pay run for one employee over one date range: how the rate is derived, the
  * day-by-day table, earnings vs deductions, and net pay.
@@ -92,8 +96,16 @@ export function PayrollBreakdown({
         <p className="font-semibold text-slate-700">How it's calculated</p>
         <p className="mt-1">{perDayFormula}</p>
         <p className="mt-1">
-          Each day's worked hours (rounded to 15 min) up to {data.policy.standardHoursPerDay}h are paid at the
-          normal rate; beyond that is {data.policy.overtimeEnabled ? `overtime × ${data.policy.overtimeMultiplier}` : 'also normal (OT off)'}.
+          Worked hours are total punched time minus the lunch break. Reg and OT columns show payable
+          regular and overtime minutes.
+        </p>
+        <p className="mt-1">
+          OT is paid only in full 1-hour blocks: after shift end + 1 hour if still working, or punch-in
+          + 1 hour if returning later (e.g. back at 6:10 → OT from 7:10). Logout at 6:59 earns no OT.
+        </p>
+        <p className="mt-1">
+          OT hours are paid at{' '}
+          {data.policy.overtimeEnabled ? `overtime × ${data.policy.overtimeMultiplier}` : 'the normal rate (OT off)'}.
         </p>
       </div>
 
@@ -113,6 +125,8 @@ export function PayrollBreakdown({
               <th className="py-1.5 pr-2">Date</th>
               <th className="py-1.5 pr-2">Day</th>
               <th className="py-1.5 pr-2">Status</th>
+              <th className="py-1.5 pr-2">In</th>
+              <th className="py-1.5 pr-2">Out</th>
               <th className="py-1.5 pr-2 text-right">Worked</th>
               <th className="py-1.5 pr-2 text-right">Reg</th>
               <th className="py-1.5 pr-2 text-right">OT</th>
@@ -122,7 +136,7 @@ export function PayrollBreakdown({
           <tbody>
             {data.days.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-4 text-center text-slate-400">
+                <td colSpan={9} className="py-4 text-center text-slate-400">
                   {includeUnpaidDays ? 'No days in this period.' : 'No payable days in this pay run.'}
                 </td>
               </tr>
@@ -137,6 +151,8 @@ export function PayrollBreakdown({
                       <span className={`rounded px-1.5 py-0.5 ${meta.cls}`}>{meta.label}</span>
                       {d.note ? <span className="ml-1 capitalize text-slate-400">{d.note}</span> : null}
                     </td>
+                    <td className="py-1.5 pr-2 whitespace-nowrap text-slate-600">{timeOnly(d.firstInAt)}</td>
+                    <td className="py-1.5 pr-2 whitespace-nowrap text-slate-600">{timeOnly(d.lastOutAt)}</td>
                     <td className="py-1.5 pr-2 text-right">{d.workedMinutes ? mins(d.workedMinutes) : '—'}</td>
                     <td className="py-1.5 pr-2 text-right">{d.regularMinutes ? mins(d.regularMinutes) : '—'}</td>
                     <td className="py-1.5 pr-2 text-right text-amber-700">{d.otMinutes ? mins(d.otMinutes) : '—'}</td>

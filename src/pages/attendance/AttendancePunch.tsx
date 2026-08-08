@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FiCheckCircle, FiClock, FiLogIn, FiLogOut, FiSearch, FiUser } from 'react-icons/fi';
 import {
+  hasOpenPunchSession,
   myTodayApi,
   punchInApi,
   punchOutApi,
@@ -315,8 +316,8 @@ export function AttendancePunch() {
     };
   }, [isKioskDevice, step]);
 
-  const canPunchIn = isKioskDevice ? !kioskToday?.open : !todayRecord?.punchIn;
-  const canPunchOut = isKioskDevice ? !!kioskToday?.open : todayRecord?.punchIn && !todayRecord?.punchOut;
+  const canPunchIn = isKioskDevice ? !kioskToday?.open : !hasOpenPunchSession(todayRecord);
+  const canPunchOut = isKioskDevice ? !!kioskToday?.open : hasOpenPunchSession(todayRecord);
   const kioskDirectoryList = kioskDirectoryData?.data ?? [];
   // The paired device declares its own mode, so a simple kiosk behaves exactly as it
   // did before this feature existed.
