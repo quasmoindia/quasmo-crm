@@ -7,6 +7,7 @@ import { DataTable } from '../../components/DataTable';
 import { AttendanceStatusBadge } from '../../components/attendance/AttendanceStatusBadge';
 import { downloadReportExport, useReportSummary } from '../../api/attendance';
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
+import { attendanceRecordWorkedLabel } from '../../components/attendance/dayTypeMeta';
 import type { AttendanceRecord, Employee, Leave, LeaveType } from '../../types/attendance';
 
 const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
@@ -26,13 +27,6 @@ function empFromLeave(l: Leave) {
   const e = l.employeeId;
   if (typeof e === 'object' && e) return `${e.fullName} (${e.employeeCode})`;
   return '—';
-}
-
-function hoursLabel(minutes: number) {
-  if (!minutes) return '0m';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 function timeOnly(iso?: string) {
@@ -142,7 +136,7 @@ export function AttendanceReports({ embedded = false }: { embedded?: boolean }) 
                 { key: 'employee', label: 'Employee', render: empFromRecord },
                 { key: 'in', label: 'First in', render: (r) => timeOnly(r.punchIn?.at) },
                 { key: 'out', label: 'Last out', render: (r) => timeOnly(r.punchOut?.at) },
-                { key: 'worked', label: 'Worked', render: (r) => hoursLabel(r.workedMinutes) },
+                { key: 'worked', label: 'Worked', render: (r) => attendanceRecordWorkedLabel(r) },
                 { key: 'late', label: 'Late (min)', render: (r) => r.lateMinutes ?? 0 },
                 {
                   key: 'geo',

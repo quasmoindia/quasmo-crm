@@ -7,6 +7,7 @@ import { Button } from '../../components/Button';
 import { SearchableSelect } from '../../components/SearchableSelect';
 import { TableRowActions } from '../../components/TableRowActions';
 import { AttendanceStatusBadge } from '../../components/attendance/AttendanceStatusBadge';
+import { formatWorkedDuration, attendanceRecordWorkedLabel } from '../../components/attendance/dayTypeMeta';
 import {
   useAddSession,
   useCorrectRecord,
@@ -41,6 +42,10 @@ function hoursLabel(minutes: number) {
 
 function timeOnly(iso?: string) {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+}
+
+function recordWorkedLabel(r: AttendanceRecord) {
+  return attendanceRecordWorkedLabel(r);
 }
 
 /** ISO → value for <input type="datetime-local"> in local time */
@@ -141,7 +146,7 @@ export function AttendanceRecords({ embedded = false }: { embedded?: boolean }) 
             { key: 'in', label: 'First in', render: (r) => timeOnly(r.punchIn?.at) },
             { key: 'out', label: 'Last out', render: (r) => timeOnly(r.punchOut?.at) },
             { key: 'sessions', label: 'Sessions', render: (r) => r.sessions?.length ?? 0 },
-            { key: 'worked', label: 'Worked', render: (r) => hoursLabel(r.workedMinutes) },
+            { key: 'worked', label: 'Worked', render: (r) => recordWorkedLabel(r) },
             {
               key: 'geo',
               label: 'Geofence',
@@ -387,15 +392,21 @@ function SessionsModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6">
         <h3 className="font-semibold text-slate-900">Sessions · {record.workDate}</h3>
-        <p className="mt-1 text-sm text-slate-600">Total worked: {hoursLabel(record.workedMinutes)}</p>
+        <p className="mt-1 text-sm text-slate-600">Total worked: {recordWorkedLabel(record)}</p>
 
         <div className="mt-4 space-y-2">
           {sessions.length === 0 && <p className="text-sm text-slate-500">No sessions.</p>}
-          {sessions.map((s, i) => (
+          {sessions.map((s, i) => {
+            const sessionSeconds =
+              s.in?.at && s.out?.at
+                ? Math.max(0, Math.round((new Date(s.out.at).getTime() - new Date(s.in.at).getTime()) / 1000))
+                : 0;
+            return (
             <div key={i} className="rounded-lg border border-slate-200 p-3 text-sm">
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-medium text-slate-700">
                   Session #{i + 1} · {timeOnly(s.in?.at)} → {s.out ? timeOnly(s.out.at) : <span className="text-amber-600">open</span>}
+                  {s.out ? <span className="ml-2 text-slate-500">({formatWorkedDuration(sessionSeconds)})</span> : null}
                 </span>
                 <div className="flex gap-3">
                   {canEdit && (
@@ -415,7 +426,8 @@ function SessionsModal({
                 <PunchView label="Out" event={s.out} />
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {editIndex != null && (

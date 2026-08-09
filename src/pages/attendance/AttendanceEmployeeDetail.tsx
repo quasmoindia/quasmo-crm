@@ -1,11 +1,12 @@
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
+import { FiCreditCard } from 'react-icons/fi';
 import { Button } from '../../components/Button';
 import { AttendanceSectionTabs } from '../../components/attendance/AttendanceSectionTabs';
 import { EmployeeAttendanceSection } from '../../components/attendance/EmployeeAttendanceSection';
 import { EmployeePayrollSection } from '../../components/attendance/EmployeePayrollSection';
 import { EmployeeProfileSection } from '../../components/attendance/EmployeeProfileSection';
-import { useDeleteEmployee, useEmployee } from '../../api/attendance';
+import { generateIdCardsPdf, triggerBlobDownload, useDeleteEmployee, useEmployee } from '../../api/attendance';
 import { useAttendancePermissions } from '../../hooks/useAttendancePermissions';
 
 const TAB_IDS = ['profile', 'attendance', 'payroll'] as const;
@@ -18,6 +19,8 @@ export function AttendanceEmployeeDetail() {
   const { data: employee, isLoading } = useEmployee(id);
   const deleteEmployee = useDeleteEmployee();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [downloadingIdCard, setDownloadingIdCard] = useState(false);
+  const [idCardError, setIdCardError] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
 
   const canSeePayroll = canAccessNav('payrollHub');
@@ -38,6 +41,20 @@ export function AttendanceEmployeeDetail() {
     params.set('tab', next);
     setSearchParams(params, { replace: true });
   };
+
+  async function downloadIdCard() {
+    if (!employee) return;
+    setDownloadingIdCard(true);
+    setIdCardError('');
+    try {
+      const blob = await generateIdCardsPdf({ employeeIds: [employee._id] });
+      triggerBlobDownload(blob, `id-card-${employee.employeeCode}.pdf`);
+    } catch (err) {
+      setIdCardError(err instanceof Error ? err.message : 'Failed to generate ID card');
+    } finally {
+      setDownloadingIdCard(false);
+    }
+  }
 
   if (isLoading) return <p className="text-slate-500">Loading...</p>;
   if (!employee) return <p className="text-slate-500">Employee not found.</p>;
@@ -62,9 +79,16 @@ export function AttendanceEmployeeDetail() {
             <p className="text-sm text-slate-500">{employee.employeeCode} · {employee.department ?? 'No department'}</p>
           </div>
         </div>
-        {canManageEmployees && (
-          <div className="flex gap-2">
-            <Button onClick={() => navigate(`/dashboard/attendance/employees/${id}/edit`)}>Edit</Button>
+        {(canManageEmployees || canAccessNav('idCards')) && (
+          <div className="flex flex-wrap gap-2">
+            {canAccessNav('idCards') && (
+              <Button variant="outline" loading={downloadingIdCard} onClick={() => void downloadIdCard()}>
+                <FiCreditCard className="size-4" /> Generate ID card
+              </Button>
+            )}
+            {canManageEmployees && (
+              <Button onClick={() => navigate(`/dashboard/attendance/employees/${id}/edit`)}>Edit</Button>
+            )}
             {isAdmin && (
               <Button
                 variant="outline"
@@ -77,6 +101,12 @@ export function AttendanceEmployeeDetail() {
           </div>
         )}
       </div>
+
+      {idCardError ? (
+        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          {idCardError}
+        </p>
+      ) : null}
 
       <AttendanceSectionTabs tabs={tabs} active={activeTab} onChange={setTab} />
 

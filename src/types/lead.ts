@@ -58,6 +58,13 @@ export interface Lead {
     state?: string;
     pincode?: string;
     catalog?: string;
+    formName?: string;
+    pageUrl?: string;
+    referrer?: string;
+    utmSource?: string;
+    utmMedium?: string;
+    utmCampaign?: string;
+    raw?: { message?: string };
   };
   documentsSent?: LeadDocumentSent[];
   /** Uploaded file URLs (PDF, images, Office, etc.) */

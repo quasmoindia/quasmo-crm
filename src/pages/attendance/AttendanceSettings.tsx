@@ -41,6 +41,7 @@ export function AttendanceSettings() {
     otpExpiryMinutes: '10',
     allowOutsideGeofence: true,
     standardHoursPerDay: '8',
+    fullDayGraceMinutes: '15',
     overtimeEnabled: true,
     overtimeMultiplier: '1.5',
     pfEnabled: false,
@@ -65,6 +66,7 @@ export function AttendanceSettings() {
         otpExpiryMinutes: String(settings.otpExpiryMinutes),
         allowOutsideGeofence: settings.allowOutsideGeofence,
         standardHoursPerDay: String(settings.standardHoursPerDay ?? 8),
+        fullDayGraceMinutes: String(settings.fullDayGraceMinutes ?? 15),
         overtimeEnabled: settings.overtimeEnabled ?? true,
         overtimeMultiplier: String(settings.overtimeMultiplier ?? 1.5),
         pfEnabled: settings.pfEnabled ?? false,
@@ -121,6 +123,7 @@ export function AttendanceSettings() {
       otpExpiryMinutes: parseInt(policy.otpExpiryMinutes, 10),
       allowOutsideGeofence: policy.allowOutsideGeofence,
       standardHoursPerDay: parseFloat(policy.standardHoursPerDay) || 8,
+      fullDayGraceMinutes: parseInt(policy.fullDayGraceMinutes, 10) || 15,
       overtimeEnabled: policy.overtimeEnabled,
       overtimeMultiplier: parseFloat(policy.overtimeMultiplier) || 1.5,
       pfEnabled: policy.pfEnabled,
@@ -409,6 +412,19 @@ export function AttendanceSettings() {
             <p className="mt-1 text-xs text-slate-400">
               Hours worked beyond this in a single day are counted as overtime. Also used to derive
               the hourly rate for daily/monthly-paid staff (daily rate ÷ standard hours).
+            </p>
+          </div>
+          <div>
+            <Input
+              label="Full-day grace (minutes)"
+              type="number"
+              value={policy.fullDayGraceMinutes}
+              onChange={(e) => setPolicy({ ...policy, fullDayGraceMinutes: e.target.value })}
+              disabled={!canManageSitesShifts}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Work within this many minutes of a full day still counts as present (e.g. 15 → 7h 45m+
+              on an 8h day). Avoids half-day when someone is off by a minute from punch rounding.
             </p>
           </div>
           <div>

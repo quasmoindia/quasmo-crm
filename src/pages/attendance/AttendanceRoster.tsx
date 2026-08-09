@@ -15,6 +15,7 @@ import {
 } from '../../api/attendance';
 import { useAttendanceGeolocation } from '../../hooks/useAttendanceGeolocation';
 import { useKioskMode } from '../../hooks/useKioskMode';
+import { formatWorkedDuration } from '../../components/attendance/dayTypeMeta';
 import type { RosterEntry } from '../../types/attendance';
 
 function timeLabel(iso?: string | null) {
@@ -22,11 +23,9 @@ function timeLabel(iso?: string | null) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function hoursLabel(minutes: number) {
-  if (!minutes) return '0m';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+function rosterWorkedLabel(today: RosterEntry['today']) {
+  if (today.grossWorkedSeconds != null) return formatWorkedDuration(today.grossWorkedSeconds);
+  return formatWorkedDuration((today.workedMinutes ?? 0) * 60);
 }
 
 function initials(name: string) {
@@ -206,11 +205,11 @@ export function AttendanceRoster() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   {today.open ? (
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
-                      In · {hoursLabel(today.workedMinutes)}
+                      In · {rosterWorkedLabel(today)}
                     </span>
                   ) : today.sessionsCount > 0 ? (
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                      Out · {hoursLabel(today.workedMinutes)}
+                      Out · {rosterWorkedLabel(today)}
                     </span>
                   ) : null}
                   {today.outsideGeofence && (
@@ -291,7 +290,7 @@ export function AttendanceRoster() {
                 <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
                   <span>
                     Today:{' '}
-                    <span className="font-semibold text-slate-700">{hoursLabel(today.workedMinutes)}</span>
+                    <span className="font-semibold text-slate-700">{rosterWorkedLabel(today)}</span>
                   </span>
                   <span>
                     {today.sessionsCount} session{today.sessionsCount === 1 ? '' : 's'}
