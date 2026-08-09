@@ -11,3 +11,24 @@ button:disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;
 }
+
+/* Dashboard chart columns rise from the baseline once on load. Applied with the
+   motion-safe: variant, so it is skipped under prefers-reduced-motion. */
+@keyframes grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+[class*="animate-[grow"] {
+  transform-origin: bottom;
+}
+
+/* Keep search field text and placeholders fully visible (no vertical clipping). */
+input[type="search"] {
+  line-height: 1.5;
+  min-height: 2.75rem;
+}

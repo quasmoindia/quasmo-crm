@@ -96,12 +96,8 @@ export function PayrollBreakdown({
         <p className="font-semibold text-slate-700">How it's calculated</p>
         <p className="mt-1">{perDayFormula}</p>
         <p className="mt-1">
-          Worked hours are total punched time minus the lunch break. Reg and OT columns show payable
-          regular and overtime minutes.
-        </p>
-        <p className="mt-1">
-          OT is paid only in full 1-hour blocks: after shift end + 1 hour if still working, or punch-in
-          + 1 hour if returning later (e.g. back at 6:10 → OT from 7:10). Logout at 6:59 earns no OT.
+          Worked = actual punched time minus lunch. Reg = payable regular (worked − OT − late penalty).
+          OT is paid only in full 1-hour blocks after shift end (+1h) or after returning (+1h from punch-in).
         </p>
         <p className="mt-1">
           OT hours are paid at{' '}

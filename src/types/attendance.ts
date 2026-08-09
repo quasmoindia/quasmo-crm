@@ -105,6 +105,8 @@ export interface AttendanceRecord {
   status: AttendanceRecordStatus;
   lateMinutes: number;
   workedMinutes: number;
+  grossWorkedMinutes?: number;
+  grossWorkedSeconds?: number;
   otMinutes?: number;
   createdAt: string;
 }
@@ -125,6 +127,7 @@ export interface RosterEntryToday {
   open: boolean;
   sessionsCount: number;
   workedMinutes: number;
+  grossWorkedSeconds?: number;
   firstInAt?: string | null;
   lastOutAt?: string | null;
   status?: AttendanceRecordStatus;
@@ -164,6 +167,7 @@ export interface AttendanceSettings {
   otpExpiryMinutes: number;
   allowOutsideGeofence: boolean;
   standardHoursPerDay: number;
+  fullDayGraceMinutes?: number;
   overtimeEnabled: boolean;
   overtimeMultiplier: number;
   pfEnabled: boolean;
@@ -516,6 +520,7 @@ export interface AttendancePunchDetail {
 export interface AttendanceSessionDetail {
   in: AttendancePunchDetail;
   out: AttendancePunchDetail | null;
+  durationSeconds?: number | null;
   durationMinutes: number | null;
 }
 

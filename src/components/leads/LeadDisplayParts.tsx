@@ -89,6 +89,9 @@ export function LeadSourceCell({ lead }: { lead: Lead }) {
       {source === 'indiamart' && lead.inquiryMeta?.queryType ? (
         <LeadInquiryTypeBadge queryType={lead.inquiryMeta.queryType} />
       ) : null}
+      {source === 'website' && lead.inquiryMeta?.formName ? (
+        <p className="text-[10px] font-medium text-violet-700">{lead.inquiryMeta.formName}</p>
+      ) : null}
       {lead.externalId ? (
         <p className="font-mono text-[10px] text-slate-400" title="External inquiry ID">
           #{lead.externalId.slice(-8)}
@@ -185,7 +188,7 @@ export function LeadKanbanMeta({ lead }: { lead: Lead }) {
 export function LeadOriginPanel({ lead }: { lead: Lead }) {
   const source = resolveLeadSource(lead);
   const meta = lead.inquiryMeta;
-  const hasInquiry =
+  const hasIndiaMartInquiry =
     source === 'indiamart' &&
     (meta?.product ||
       meta?.subject ||
@@ -194,6 +197,17 @@ export function LeadOriginPanel({ lead }: { lead: Lead }) {
       meta?.mcat ||
       meta?.catalog ||
       lead.externalId);
+  const hasWebsiteInquiry =
+    source === 'website' &&
+    (meta?.formName ||
+      meta?.pageUrl ||
+      meta?.referrer ||
+      meta?.utmSource ||
+      meta?.utmMedium ||
+      meta?.utmCampaign ||
+      meta?.product ||
+      meta?.subject ||
+      meta?.raw?.message);
 
   return (
     <section className="rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50/90 via-white to-indigo-50/30 p-4 shadow-sm sm:p-5">
@@ -210,7 +224,7 @@ export function LeadOriginPanel({ lead }: { lead: Lead }) {
         <LeadSourceBadge source={source} size="md" />
       </div>
 
-      {hasInquiry ? (
+      {hasIndiaMartInquiry ? (
         <dl className="grid gap-3 sm:grid-cols-2">
           {lead.externalId ? (
             <div className="rounded-xl border border-orange-100 bg-orange-50/50 px-3 py-2.5">
@@ -268,6 +282,75 @@ export function LeadOriginPanel({ lead }: { lead: Lead }) {
                   {meta.catalog}
                 </a>
               </dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : hasWebsiteInquiry ? (
+        <dl className="grid gap-3 sm:grid-cols-2">
+          {meta?.formName ? (
+            <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-2.5">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-violet-800/70">Form</dt>
+              <dd className="mt-0.5 text-sm font-medium text-violet-950">{meta.formName}</dd>
+            </div>
+          ) : null}
+          {meta?.pageUrl ? (
+            <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 sm:col-span-2">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Page</dt>
+              <dd className="mt-0.5 truncate text-sm text-indigo-700">
+                <a href={meta.pageUrl} target="_blank" rel="noreferrer" className="hover:underline">
+                  {meta.pageUrl}
+                </a>
+              </dd>
+            </div>
+          ) : null}
+          {meta?.referrer ? (
+            <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 sm:col-span-2">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Referrer</dt>
+              <dd className="mt-0.5 truncate text-sm text-slate-800" title={meta.referrer}>
+                {meta.referrer}
+              </dd>
+            </div>
+          ) : null}
+          {[meta?.utmSource, meta?.utmMedium, meta?.utmCampaign].some(Boolean) ? (
+            <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 sm:col-span-2">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Campaign (UTM)</dt>
+              <dd className="mt-0.5 text-sm text-slate-800">
+                {[meta?.utmSource, meta?.utmMedium, meta?.utmCampaign].filter(Boolean).join(' · ')}
+              </dd>
+            </div>
+          ) : null}
+          {meta?.product ? (
+            <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 sm:col-span-2">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Product interest</dt>
+              <dd className="mt-0.5 text-sm font-medium text-slate-800">{meta.product}</dd>
+            </div>
+          ) : null}
+          {meta?.subject && meta.subject !== meta?.product ? (
+            <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 sm:col-span-2">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Subject</dt>
+              <dd className="mt-0.5 text-sm text-slate-800">{meta.subject}</dd>
+            </div>
+          ) : null}
+          {[meta?.city, meta?.state, meta?.pincode].some(Boolean) ? (
+            <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Location</dt>
+              <dd className="mt-0.5 text-sm text-slate-800">
+                {[meta?.city, meta?.state, meta?.pincode].filter(Boolean).join(', ')}
+              </dd>
+            </div>
+          ) : null}
+          {meta?.queryTime ? (
+            <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Submitted</dt>
+              <dd className="mt-0.5 text-sm text-slate-800">
+                {new Date(meta.queryTime).toLocaleString()}
+              </dd>
+            </div>
+          ) : null}
+          {meta?.raw?.message ? (
+            <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 sm:col-span-2">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Message</dt>
+              <dd className="mt-0.5 whitespace-pre-wrap text-sm text-slate-800">{meta.raw.message}</dd>
             </div>
           ) : null}
         </dl>

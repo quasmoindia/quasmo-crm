@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { FiAlertTriangle, FiMapPin, FiMonitor, FiSmartphone, FiTablet, FiUser, FiUserCheck, FiX } from 'react-icons/fi';
 import type { AttendancePunchDetail, AttendanceSessionDetail } from '../../types/attendance';
-import { formatMinutes } from './dayTypeMeta';
+import { formatMinutes, formatWorkedDuration } from './dayTypeMeta';
 
 /**
  * Read-only rendering of a day's punch sessions: selfies, times, device, location and
@@ -136,11 +136,15 @@ export function AttendanceSessionList({
               <p className="text-xs font-semibold text-slate-700">
                 Session {i + 1} of {sessions.length}
               </p>
-              {session.durationMinutes !== null && (
+              {session.durationSeconds != null ? (
+                <span className="text-xs font-medium text-slate-600">
+                  {formatWorkedDuration(session.durationSeconds)}
+                </span>
+              ) : session.durationMinutes !== null && session.durationMinutes !== undefined ? (
                 <span className="text-xs font-medium text-slate-600">
                   {formatMinutes(session.durationMinutes)}
                 </span>
-              )}
+              ) : null}
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <PunchCard punch={session.in} label="Punch in" onPhotoClick={(url, caption) => setLightbox({ url, caption })} />

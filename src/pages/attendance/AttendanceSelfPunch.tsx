@@ -18,6 +18,7 @@ import {
   useSelfPayroll,
 } from '../../api/attendance';
 import { useAttendanceGeolocation } from '../../hooks/useAttendanceGeolocation';
+import { attendanceRecordWorkedLabel } from '../../components/attendance/dayTypeMeta';
 import type { AttendanceRecord, RegularizationStatus } from '../../types/attendance';
 
 const REGULARIZATION_STATUS_STYLES: Record<RegularizationStatus, string> = {
@@ -31,13 +32,6 @@ function monthRange() {
   const dateFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
   const dateTo = now.toISOString().slice(0, 10);
   return { dateFrom, dateTo };
-}
-
-function formatMinutes(minutes?: number) {
-  if (!minutes) return '0m';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 function hasOpenSession(record?: AttendanceRecord | null) {
@@ -97,7 +91,7 @@ export function AttendanceSelfPunch() {
 
   const stats = useMemo(
     () => [
-      { label: 'Worked today', value: formatMinutes(record?.workedMinutes) },
+      { label: 'Worked today', value: record ? attendanceRecordWorkedLabel(record) : '0s' },
       { label: 'Sessions', value: String(record?.sessions?.length ?? 0) },
       { label: 'Current', value: open ? 'In' : 'Out' },
     ],

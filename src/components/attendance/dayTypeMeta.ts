@@ -89,8 +89,36 @@ export const DAY_TYPE_LEGEND: { type: DayType; label: string }[] = [
   { type: 'paid_leave', label: 'Leave' },
 ];
 
-/** '8h 45m' from a minute count. */
+/** '8h 45m' from a minute count (payroll / summaries). */
 export function formatMinutes(m: number): string {
   const h = Math.floor(m / 60);
   return `${h}h ${m % 60}m`;
+}
+
+/** Exact punched duration for attendance logs — shows seconds when under 1 hour. */
+export function formatWorkedDuration(totalSeconds: number): string {
+  if (totalSeconds <= 0) return '0s';
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) return s > 0 ? `${h}h ${m}m ${s}s` : `${h}h ${m}m`;
+  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  return `${s}s`;
+}
+
+/** Worked time for an attendance record (actual punches minus lunch). */
+export function attendanceRecordWorkedLabel(r: {
+  grossWorkedSeconds?: number;
+  grossWorkedMinutes?: number;
+  sessions?: Array<{ in?: { at: string }; out?: { at: string } }>;
+}): string {
+  if (r.grossWorkedSeconds != null) return formatWorkedDuration(r.grossWorkedSeconds);
+  if (r.grossWorkedMinutes != null) return formatWorkedDuration(r.grossWorkedMinutes * 60);
+  let total = 0;
+  for (const s of r.sessions ?? []) {
+    if (s.in?.at && s.out?.at) {
+      total += Math.max(0, Math.round((new Date(s.out.at).getTime() - new Date(s.in.at).getTime()) / 1000));
+    }
+  }
+  return formatWorkedDuration(total);
 }
