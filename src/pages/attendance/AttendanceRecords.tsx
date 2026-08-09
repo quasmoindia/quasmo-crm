@@ -33,13 +33,6 @@ function empId(r: AttendanceRecord): string {
   return typeof e === 'object' && e ? (e as Employee)._id : e;
 }
 
-function hoursLabel(minutes: number) {
-  if (!minutes) return '0m';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
 function timeOnly(iso?: string) {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
 }

@@ -61,8 +61,8 @@ function IdCardPreview({
         
         {/* Top Header */}
         <div className="relative z-10 flex flex-col items-center pt-5 px-4 shrink-0">
-           <div className="flex size-9 items-center justify-center rounded-xl bg-white shadow-md ring-1 ring-white/30 mb-2">
-              <img src="/assets/quasmo-logo.png" alt="" className="size-5 object-contain" />
+           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-md ring-1 ring-white/30 mb-2">
+              <img src="/assets/quasmo-logo.png" alt="Quasmo" className="h-7 w-7 object-contain" />
             </div>
             <p className="text-[10px] font-black text-white tracking-[0.2em] uppercase drop-shadow-sm truncate w-full">{companyName}</p>
         </div>

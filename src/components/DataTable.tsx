@@ -91,7 +91,7 @@ export function DataTable<T extends object>({
                     }
                   }}
                   placeholder={search.placeholder ?? 'Search...'}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#305dff] focus:outline-none focus:ring-1 focus:ring-[#305dff]"
+                  className="w-full min-h-11 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm leading-normal text-slate-900 placeholder:text-slate-400 focus:border-[#305dff] focus:outline-none focus:ring-1 focus:ring-[#305dff]"
                 />
               </div>
             )}

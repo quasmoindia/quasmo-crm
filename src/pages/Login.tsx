@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { BrandLogo } from '../components/BrandLogo';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
@@ -74,6 +75,7 @@ export function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
       <div className="w-full max-w-md">
+        <BrandLogo variant="stacked" className="mb-8" />
         <Card title="Sign in" className="mb-4">
           <div className="mb-4 flex rounded-lg border border-slate-200 bg-slate-50 p-1">
             <button

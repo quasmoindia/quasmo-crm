@@ -31,6 +31,7 @@ import {
 import { canUseDefaultSelfPunch, getAttendanceModuleTitle, isSelfPunchPath } from '../config/attendanceAccess';
 import { canAccessModule, NAV_MODULES, getModuleIdFromPath } from '../config/roles';
 import { useKioskMode } from '../hooks/useKioskMode';
+import { BrandLogo } from '../components/BrandLogo';
 
 const NAV_SECTIONS = [
   { title: null, moduleIds: ['dashboard'] },
@@ -116,8 +117,8 @@ export function DashboardLayout() {
 
   const sidebarContent = (
     <>
-      <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/15 bg-linear-to-br from-[#3b4dff] via-[#2f5bff] to-[#2b66ff] px-4 text-white shadow-[0_1px_0_rgba(15,23,42,0.06)] sm:px-5">
-        <h1 className="truncate text-lg font-semibold leading-none tracking-tight">Hexa CRM</h1>
+      <div className="flex h-17 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 sm:px-5">
+        <BrandLogo variant="mark" iconClassName="h-10 w-10" />
         <button
           type="button"
           onClick={() => setDrawerOpen(false)}
@@ -243,14 +244,14 @@ export function DashboardLayout() {
             <FiMenu className="size-5" />
           </button>
 
-          <span className="shrink-0 text-base font-semibold text-slate-800 sm:hidden">Quasmo CRM</span>
+          <span className="shrink-0 text-base font-semibold text-slate-800 sm:hidden">HexaCRM</span>
 
           <div className="hidden min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 sm:flex sm:max-w-xl lg:max-w-2xl">
             <FiSearch className="size-4 shrink-0 text-slate-400" />
             <input
               type="search"
               placeholder="Quick search..."
-              className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent py-1 text-sm leading-normal text-slate-700 placeholder:text-slate-400 focus:outline-none"
             />
           </div>
 
