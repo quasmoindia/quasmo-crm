@@ -141,7 +141,7 @@ export function Login() {
           ) : (
             <>
               <p className="mb-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                Phone OTP is for non-admin users. Administrators must use email sign-in.
+                We'll text a 6-digit code to the mobile number on your account.
               </p>
               <form onSubmit={handleRequestOtp} className="flex flex-col gap-4">
                 <Input
