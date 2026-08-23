@@ -1,12 +1,23 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BrandLogo } from '../components/BrandLogo';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { useLoginMutation, useRequestOtpMutation, useLoginWithOtpMutation } from '../api/auth';
+import { getRetryAfterSec } from '../utils/api';
 
 type LoginMode = 'email' | 'phone';
+
+/** Matches the server's 60s send cooldown, so the button re-enables when a resend would work. */
+const RESEND_COOLDOWN_SEC = 60;
+const OTP_LENGTH = 6;
+
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '').slice(-10);
+  if (digits.length !== 10) return phone;
+  return `${digits.slice(0, 2)}XXXXXX${digits.slice(-2)}`;
+}
 
 export function Login() {
   const navigate = useNavigate();
@@ -17,16 +28,62 @@ export function Login() {
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loginMutation = useLoginMutation();
   const requestOtpMutation = useRequestOtpMutation();
   const loginWithOtpMutation = useLoginWithOtpMutation();
+
+  // Single interval drives the resend countdown; cleared on unmount so it cannot outlive the page.
+  useEffect(() => {
+    if (cooldown <= 0) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+    if (timerRef.current) return;
+    timerRef.current = setInterval(() => {
+      setCooldown((current) => {
+        if (current <= 1) {
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+  }, [cooldown]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   const errorMessage =
     loginMutation.error?.message ??
     requestOtpMutation.error?.message ??
     loginWithOtpMutation.error?.message ??
     fieldError;
+
+  function resetOtpFlow() {
+    setOtpSent(false);
+    setOtp('');
+    setFieldError(null);
+    setNotice(null);
+    setCooldown(0);
+  }
+
+  function switchMode(next: LoginMode) {
+    setMode(next);
+    resetOtpFlow();
+  }
 
   function handleEmailSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,9 +98,9 @@ export function Login() {
     );
   }
 
-  function handleRequestOtp(e: React.FormEvent) {
-    e.preventDefault();
+  function sendOtp() {
     setFieldError(null);
+    setNotice(null);
     if (!phone.trim()) {
       setFieldError('Phone number is required');
       return;
@@ -51,10 +108,28 @@ export function Login() {
     requestOtpMutation.mutate(
       { phone: phone.trim() },
       {
-        onSuccess: () => setOtpSent(true),
-        onError: () => setFieldError(null),
+        onSuccess: (data) => {
+          setOtpSent(true);
+          setOtp('');
+          setCooldown(RESEND_COOLDOWN_SEC);
+          setNotice(
+            data.devMode
+              ? 'SMS is not configured on the server — check the server console for the code.'
+              : data.message
+          );
+        },
+        onError: (error) => {
+          // A 429 tells us exactly how long to wait; reflect it rather than guessing.
+          const retryAfter = getRetryAfterSec(error);
+          if (retryAfter) setCooldown(retryAfter);
+        },
       }
     );
+  }
+
+  function handleRequestOtp(e: React.FormEvent) {
+    e.preventDefault();
+    sendOtp();
   }
 
   function handleOtpSubmit(e: React.FormEvent) {
@@ -70,22 +145,19 @@ export function Login() {
     );
   }
 
-  const pending = loginMutation.isPending || requestOtpMutation.isPending || loginWithOtpMutation.isPending;
+  const pending =
+    loginMutation.isPending || requestOtpMutation.isPending || loginWithOtpMutation.isPending;
+  const canVerify = otp.trim().length === OTP_LENGTH;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
       <div className="w-full max-w-md">
         <BrandLogo variant="stacked" className="mb-8" />
-        <Card title="Sign in" className="mb-4">
+        <Card title="Sign in">
           <div className="mb-4 flex rounded-lg border border-slate-200 bg-slate-50 p-1">
             <button
               type="button"
-              onClick={() => {
-                setMode('email');
-                setFieldError(null);
-                setOtpSent(false);
-                setOtp('');
-              }}
+              onClick={() => switchMode('email')}
               className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
                 mode === 'email' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
               }`}
@@ -94,17 +166,12 @@ export function Login() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setMode('phone');
-                setFieldError(null);
-                setOtpSent(false);
-                setOtp('');
-              }}
+              onClick={() => switchMode('phone')}
               className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
                 mode === 'phone' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Phone & OTP
+              Phone &amp; OTP
             </button>
           </div>
 
@@ -138,10 +205,10 @@ export function Login() {
                 Sign in
               </Button>
             </form>
-          ) : (
+          ) : !otpSent ? (
             <>
               <p className="mb-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                Phone OTP is for non-admin users. Administrators must use email sign-in.
+                We&apos;ll text a 6-digit code to the mobile number on your account.
               </p>
               <form onSubmit={handleRequestOtp} className="flex flex-col gap-4">
                 <Input
@@ -151,53 +218,68 @@ export function Login() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="10-digit mobile e.g. 9876543210"
-                  disabled={pending || otpSent}
+                  disabled={pending}
                 />
-                {!otpSent ? (
-                  <Button
-                    type="submit"
-                    fullWidth
-                    loading={requestOtpMutation.isPending}
-                    className="mt-2"
-                  >
-                    Send OTP
-                  </Button>
-                ) : null}
+                <Button type="submit" fullWidth loading={requestOtpMutation.isPending} className="mt-2">
+                  Send OTP
+                </Button>
               </form>
-              {otpSent && (
-                <form onSubmit={handleOtpSubmit} className="mt-4 flex flex-col gap-4 border-t border-slate-200 pt-4">
-                  <Input
-                    label="OTP"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    placeholder="Enter OTP"
-                    disabled={pending}
-                    maxLength={6}
-                  />
-                  <Button type="submit" fullWidth loading={loginWithOtpMutation.isPending} className="mt-2">
-                    Sign in with OTP
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={() => setOtpSent(false)}
-                    className="text-sm text-indigo-600 hover:text-indigo-500"
-                  >
-                    Change number
-                  </button>
-                </form>
-              )}
+            </>
+          ) : (
+            <>
+              <div className="mb-4 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <span>
+                  Code sent to <span className="font-medium text-slate-800">{maskPhone(phone)}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={resetOtpFlow}
+                  className="font-medium text-indigo-600 hover:text-indigo-500"
+                >
+                  Change
+                </button>
+              </div>
+
+              {notice ? (
+                <div className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div>
+              ) : null}
+
+              <form onSubmit={handleOtpSubmit} className="flex flex-col gap-4">
+                <Input
+                  label="OTP"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, OTP_LENGTH))}
+                  placeholder="6-digit code"
+                  disabled={pending}
+                  maxLength={OTP_LENGTH}
+                />
+                <Button
+                  type="submit"
+                  fullWidth
+                  loading={loginWithOtpMutation.isPending}
+                  disabled={!canVerify || pending}
+                  className="mt-2"
+                >
+                  Sign in with OTP
+                </Button>
+              </form>
+
+              <div className="mt-4 text-center">
+                <button
+                  type="button"
+                  onClick={sendOtp}
+                  disabled={cooldown > 0 || pending}
+                  className="text-sm font-medium text-indigo-600 hover:text-indigo-500 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:text-slate-400"
+                >
+                  {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend code'}
+                </button>
+              </div>
             </>
           )}
         </Card>
-        <p className="text-center text-sm text-slate-600">
-          Don&apos;t have an account?{' '}
-          <Link to="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
-            Sign up
-          </Link>
-        </p>
       </div>
     </div>
   );
