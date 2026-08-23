@@ -7,6 +7,7 @@ import type {
   LoginCredentials,
   LoginWithOtpPayload,
   RequestOtpPayload,
+  RequestOtpResponse,
   SignUpCredentials,
 } from '../types/auth';
 
@@ -34,7 +35,7 @@ export function loginApi(credentials: LoginCredentials) {
 }
 
 export function requestOtpApi(payload: RequestOtpPayload) {
-  return post<{ message: string }>(`${AUTH_BASE}/request-otp`, payload);
+  return post<RequestOtpResponse>(`${AUTH_BASE}/request-otp`, payload);
 }
 
 export function loginWithOtpApi(payload: LoginWithOtpPayload) {

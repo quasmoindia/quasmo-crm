@@ -22,6 +22,14 @@ export interface RequestOtpPayload {
   phone: string;
 }
 
+export interface RequestOtpResponse {
+  message: string;
+  expiresAt?: string;
+  expiryMinutes?: number;
+  /** Set when the server has no SMS provider configured (non-production only). */
+  devMode?: boolean;
+}
+
 export interface LoginWithOtpPayload {
   phone: string;
   otp: string;

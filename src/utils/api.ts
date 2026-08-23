@@ -30,9 +30,32 @@ async function request<T>(endpoint: string, config: RequestConfig = {}): Promise
       handleSessionExpired();
       throw new Error('Session expired');
     }
-    throw new Error((data as { message?: string }).message ?? 'Request failed');
+    throw new ApiError((data as { message?: string }).message ?? 'Request failed', res.status, data);
   }
   return data as T;
+}
+
+/**
+ * Carries the HTTP status and parsed body alongside the message, so callers can react to a
+ * specific failure (e.g. a 429 carrying `retryAfterSec`) rather than only showing its text.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly data: unknown;
+
+  constructor(message: string, status: number, data: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
+/** Seconds to wait before retrying, when the server sent a rate-limit response. */
+export function getRetryAfterSec(error: unknown): number | null {
+  if (!(error instanceof ApiError) || error.status !== 429) return null;
+  const sec = (error.data as { retryAfterSec?: number } | null)?.retryAfterSec;
+  return typeof sec === 'number' && sec > 0 ? sec : null;
 }
 
 export async function get<T>(endpoint: string, config?: RequestConfig): Promise<T> {
