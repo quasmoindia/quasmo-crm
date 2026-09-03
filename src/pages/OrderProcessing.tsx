@@ -40,6 +40,7 @@ import { useProductsList } from '../api/products';
 import { useCouriersList, useCreateCourier } from '../api/couriers';
 import { ORDER_STATUS_OPTIONS, type Order, type OrderStatus } from '../types/order';
 import { API_BASE_URL } from '../utils/constants';
+import { useSearchTermFromUrl } from '../hooks/useSearchTermFromUrl';
 
 function StatusBadge({ status }: { status: OrderStatus }) {
   const map: Record<OrderStatus, { label: string; color: string }> = {
@@ -1680,8 +1681,10 @@ export function OrderProcessing() {
   const isAdmin = authData?.user?.role === 'admin';
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  // Seeded from ?q= so arriving from global search lands here already filtered.
+  const initialSearch = useSearchTermFromUrl();
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | ''>('');
 
   const isKanban = viewMode === 'kanban';

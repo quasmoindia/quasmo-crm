@@ -44,6 +44,7 @@ import type { TaxDocumentKind } from '../types/taxDocumentKind';
 import { DOCUMENT_KIND_OPTIONS, documentKindUiLabels, isPurchaseOrder } from '../types/taxDocumentKind';
 import type { BankAccount } from '../types/bankAccount';
 import type { SignaturePreset, SignaturePresetSlot } from '../types/signaturePreset';
+import { useSearchTermFromUrl } from '../hooks/useSearchTermFromUrl';
 
 /** Line row in the editor: qty/price may be '' while the number input is cleared. */
 type InvoiceLineFormRow = Omit<TaxInvoiceLineItem, 'qty' | 'price' | 'taxRate'> & {
@@ -455,8 +456,10 @@ export function TaxInvoiceManagement() {
   const { data: auth } = useCurrentUser();
   const isAdmin = auth?.user?.role === 'admin';
   const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  // Seeded from ?q= so arriving from global search lands here already filtered.
+  const initialSearch = useSearchTermFromUrl();
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);

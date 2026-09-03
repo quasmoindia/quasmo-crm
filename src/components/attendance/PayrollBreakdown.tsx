@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { usePayrollEmployeeDetail } from '../../api/attendance';
 import {
   buildDeductionLines,
@@ -16,6 +17,41 @@ function mins(m: number) {
 
 function timeOnly(iso?: string | null) {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+}
+
+/**
+ * Why a payable time differs from the punched one.
+ *
+ * Keyed by the flags the calculator emits, so the explanation shown to a user is generated
+ * from the rule that actually fired rather than guessed at from the numbers.
+ */
+const FLAG_TEXT: Record<string, string> = {
+  clamped_to_shift_start: 'Arrived before the shift — pay starts at shift start',
+  within_grace: 'Late but inside the grace period — credited from shift start',
+  late_beyond_grace: 'Arrived after the grace period — credited from the actual punch',
+  snapped_to_lunch_end: 'Punched near or during lunch — credited from the end of lunch',
+  capped_at_shift_end: 'Stayed past shift end — regular hours capped at shift end',
+  ot_credited: 'Overtime credited',
+  ot_below_threshold: 'Time past shift end was below the overtime threshold',
+  ot_remainder_discarded: 'Leftover minutes below a full overtime block',
+  missing_punch_out: 'No punch-out recorded — nothing payable',
+  missing_punch_in: 'No punch-in recorded',
+  negative_duration: 'Punch-out is before punch-in — needs correcting',
+  no_shift_configured: 'No shift assigned — punched time credited as-is',
+  left_early: 'Left before shift end',
+};
+
+/** The In/Out cell: the exact punch, with the payable time underneath when they differ. */
+function PunchCell({ actual, effective }: { actual?: string | null; effective?: string | null }) {
+  const a = timeOnly(actual);
+  const e = timeOnly(effective);
+  const differs = !!actual && !!effective && a !== e;
+  return (
+    <td className="py-1.5 pr-2 whitespace-nowrap text-slate-600">
+      <span className={differs ? 'text-slate-400 line-through decoration-slate-300' : ''}>{a}</span>
+      {differs ? <span className="block text-[11px] font-medium text-slate-700">→ {e}</span> : null}
+    </td>
+  );
 }
 
 /**
@@ -42,12 +78,28 @@ export function PayrollBreakdown({
   /** List absent / unpaid-leave / no-punch-out days as zero-amount rows too. */
   includeUnpaidDays?: boolean;
 }) {
+  const [openDate, setOpenDate] = useState<string | null>(null);
   const { data, isLoading, error } = usePayrollEmployeeDetail(employeeId, {
     dateFrom,
     dateTo,
     payComponent,
     includeUnpaidDays,
   });
+
+  /**
+   * Describe the shift the month actually resolved to, rather than restating a fixed rule.
+   * When a period spans more than one shift each is named, since the rules differ per shift.
+   */
+  const shiftSummary = (() => {
+    if (!data) return '';
+    const names = [...new Set(data.days.map((d) => d.shiftName).filter(Boolean))] as string[];
+    if (names.length === 0) return '';
+    const shifts = names.length === 1 ? `Shift: ${names[0]}.` : `Shifts in this period: ${names.join(', ')}.`;
+    const ot = data.policy.overtimeEnabled
+      ? ` Overtime is paid at ${data.policy.overtimeMultiplier}x.`
+      : ' Overtime is currently switched off.';
+    return shifts + ot;
+  })();
 
   const perDayFormula = (() => {
     if (!data) return '';
@@ -96,9 +148,11 @@ export function PayrollBreakdown({
         <p className="font-semibold text-slate-700">How it's calculated</p>
         <p className="mt-1">{perDayFormula}</p>
         <p className="mt-1">
-          Worked = actual punched time minus lunch. Reg = payable regular (worked − OT − late penalty).
-          OT is paid only in full 1-hour blocks after shift end (+1h) or after returning (+1h from punch-in).
+          Worked = Reg + OT, always. Reg is the payable window — clamped to shift start, capped at
+          shift end, minus any unpaid lunch it spans. Arriving late shortens the window; no separate
+          penalty is subtracted on top.
         </p>
+        {shiftSummary ? <p className="mt-1">{shiftSummary}</p> : null}
         <p className="mt-1">
           OT hours are paid at{' '}
           {data.policy.overtimeEnabled ? `overtime × ${data.policy.overtimeMultiplier}` : 'the normal rate (OT off)'}.
@@ -137,24 +191,87 @@ export function PayrollBreakdown({
                 </td>
               </tr>
             ) : (
-              data.days.map((d) => {
+              data.days.flatMap((d) => {
                 const meta = DAY_TYPE_META[d.type];
-                return (
-                  <tr key={d.date} className={`border-b border-slate-100 ${d.amount ? '' : 'bg-slate-50/60'}`}>
+                const reasons = (d.flags ?? []).map((f) => FLAG_TEXT[f]).filter(Boolean) as string[];
+                const isOpen = openDate === d.date;
+                const rows = [
+                  <tr
+                    key={d.date}
+                    className={`border-b border-slate-100 ${d.amount ? '' : 'bg-slate-50/60'}`}
+                  >
                     <td className="py-1.5 pr-2 whitespace-nowrap">{d.date.slice(5)}</td>
                     <td className="py-1.5 pr-2 text-slate-500">{d.day}</td>
                     <td className="py-1.5 pr-2">
                       <span className={`rounded px-1.5 py-0.5 ${meta.cls}`}>{meta.label}</span>
                       {d.note ? <span className="ml-1 capitalize text-slate-400">{d.note}</span> : null}
+                      {reasons.length ? (
+                        <span
+                          className="ml-1 cursor-help text-slate-400"
+                          title={reasons.join('\n')}
+                          aria-label={reasons.join('. ')}
+                        >
+                          ⓘ
+                        </span>
+                      ) : null}
                     </td>
-                    <td className="py-1.5 pr-2 whitespace-nowrap text-slate-600">{timeOnly(d.firstInAt)}</td>
-                    <td className="py-1.5 pr-2 whitespace-nowrap text-slate-600">{timeOnly(d.lastOutAt)}</td>
+                    <PunchCell actual={d.firstInAt} effective={d.effectiveInAt} />
+                    <PunchCell actual={d.lastOutAt} effective={d.effectiveOutAt} />
                     <td className="py-1.5 pr-2 text-right">{d.workedMinutes ? mins(d.workedMinutes) : '—'}</td>
                     <td className="py-1.5 pr-2 text-right">{d.regularMinutes ? mins(d.regularMinutes) : '—'}</td>
-                    <td className="py-1.5 pr-2 text-right text-amber-700">{d.otMinutes ? mins(d.otMinutes) : '—'}</td>
-                    <td className="py-1.5 text-right font-medium">{d.amount ? inr(d.amount) : '—'}</td>
-                  </tr>
-                );
+                    <td className="py-1.5 pr-2 text-right text-amber-700">
+                      {d.otMinutes ? mins(d.otMinutes) : '—'}
+                      {d.unpaidBeyondShiftMinutes ? (
+                        <span
+                          className="block text-[11px] font-normal text-slate-400"
+                          title={`${mins(d.unpaidBeyondShiftMinutes)} past shift end was not paid — below the overtime threshold or below a full block.`}
+                        >
+                          +{mins(d.unpaidBeyondShiftMinutes)} unpaid
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-1.5 text-right font-medium">
+                      {d.amount ? (
+                        <button
+                          type="button"
+                          onClick={() => setOpenDate(isOpen ? null : d.date)}
+                          className="underline decoration-dotted underline-offset-2 hover:text-indigo-600"
+                          aria-expanded={isOpen}
+                        >
+                          {inr(d.amount)}
+                        </button>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>,
+                ];
+
+                if (isOpen && d.breakdown?.length) {
+                  rows.push(
+                    <tr key={`${d.date}-breakdown`} className="border-b border-slate-100 bg-slate-50">
+                      <td colSpan={9} className="px-3 py-2">
+                        <p className="mb-1 font-semibold text-slate-600">
+                          How {inr(d.amount)} was calculated{d.shiftName ? ` · ${d.shiftName}` : ''}
+                        </p>
+                        <ul className="space-y-0.5">
+                          {d.breakdown.map((b, i) => (
+                            <li key={i} className="flex justify-between gap-4 text-slate-600">
+                              <span>
+                                <span className="font-medium text-slate-700">{b.label}:</span> {b.detail}
+                              </span>
+                              <span className="whitespace-nowrap tabular-nums text-slate-500">
+                                {b.minutes !== undefined ? mins(Math.abs(b.minutes)) : ''}
+                                {b.amount !== undefined ? ` ${inr(b.amount)}` : ''}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  );
+                }
+                return rows;
               })
             )}
           </tbody>

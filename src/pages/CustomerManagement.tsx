@@ -8,6 +8,7 @@ import { DataTable } from '../components/DataTable';
 import { useCustomersList, useUpdateCustomer, useDeleteCustomer } from '../api/customers';
 import { useCurrentUser } from '../api/auth';
 import type { Customer } from '../types/customer';
+import { useSearchTermFromUrl } from '../hooks/useSearchTermFromUrl';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
@@ -22,8 +23,10 @@ export function CustomerManagement() {
   const { data: authData } = useCurrentUser();
   const isAdmin = authData?.user?.role === 'admin';
   const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  // Seeded from ?q= so arriving from global search lands here already filtered.
+  const initialSearch = useSearchTermFromUrl();
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [editTarget, setEditTarget] = useState<Customer | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
 

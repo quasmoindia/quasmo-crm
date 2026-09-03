@@ -29,6 +29,7 @@ import { useCurrentUser } from '../api/auth';
 import { useSendMessageToPhone } from '../api/messages';
 import type { Complaint, ComplaintStatus, ComplaintPriority, ComplaintComment } from '../types/complaint';
 import { STATUS_OPTIONS, PRIORITY_OPTIONS } from '../types/complaint';
+import { useSearchTermFromUrl } from '../hooks/useSearchTermFromUrl';
 
 const KANBAN_LIMIT = 500;
 
@@ -465,8 +466,10 @@ export function ComplaintManagement() {
   const [statusFilter, setStatusFilter] = useState<ComplaintStatus | ''>('');
   const [priorityFilter, setPriorityFilter] = useState<ComplaintPriority | ''>('');
   const [assignedFilter, setAssignedFilter] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  // Seeded from ?q= so arriving from global search lands here already filtered.
+  const initialSearch = useSearchTermFromUrl();
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);

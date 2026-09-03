@@ -12,7 +12,6 @@ import {
   FiGrid,
   FiLogOut,
   FiMenu,
-  FiSearch,
   FiSettings,
   FiShoppingCart,
   FiUsers,
@@ -32,6 +31,7 @@ import { canUseDefaultSelfPunch, getAttendanceModuleTitle, isSelfPunchPath } fro
 import { canAccessModule, NAV_MODULES, getModuleIdFromPath } from '../config/roles';
 import { useKioskMode } from '../hooks/useKioskMode';
 import { BrandLogo } from '../components/BrandLogo';
+import { GlobalSearch } from '../components/GlobalSearch';
 
 const NAV_SECTIONS = [
   { title: null, moduleIds: ['dashboard'] },
@@ -246,14 +246,7 @@ export function DashboardLayout() {
 
           <span className="shrink-0 text-base font-semibold text-slate-800 sm:hidden">HexaCRM</span>
 
-          <div className="hidden min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 sm:flex sm:max-w-xl lg:max-w-2xl">
-            <FiSearch className="size-4 shrink-0 text-slate-400" />
-            <input
-              type="search"
-              placeholder="Quick search..."
-              className="min-w-0 flex-1 bg-transparent py-1 text-sm leading-normal text-slate-700 placeholder:text-slate-400 focus:outline-none"
-            />
-          </div>
+          <GlobalSearch />
 
           <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
             <div className="hidden min-w-0 flex-col text-right sm:flex sm:pr-1">

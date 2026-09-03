@@ -635,6 +635,16 @@ export interface PayrollDayDetail {
   regularPart?: number;
   overtimePart?: number;
   note?: string;
+  /** Times actually used for pay, when clamping/snapping moved them off the punch. */
+  effectiveInAt?: string | null;
+  effectiveOutAt?: string | null;
+  /** Past shift end but below the OT threshold, or below a full block — unpaid. */
+  unpaidBeyondShiftMinutes?: number;
+  lunchDeductedMinutes?: number;
+  lateMinutes?: number;
+  shiftName?: string | null;
+  flags?: string[];
+  breakdown?: Array<{ label: string; detail: string; minutes?: number; amount?: number }>;
 }
 
 export interface PayrollEmployeeDetail {
