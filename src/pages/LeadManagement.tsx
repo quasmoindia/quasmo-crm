@@ -63,6 +63,7 @@ import type { Lead, LeadStatus, LeadSource, CreateLeadPayload, UpdateLeadPayload
 import { LEAD_STATUS_OPTIONS, LEAD_SOURCE_OPTIONS, LEAD_STATUS_STYLES } from '../types/lead';
 import type { TaxInvoice } from '../types/taxInvoice';
 import { DOCUMENT_KIND_OPTIONS } from '../types/taxDocumentKind';
+import { useSearchTermFromUrl } from '../hooks/useSearchTermFromUrl';
 
 const KANBAN_PAGE_SIZE = 500;
 const KANBAN_MAX_LEADS = KANBAN_PAGE_SIZE * 20;
@@ -618,8 +619,10 @@ export function LeadManagement() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<LeadStatus | ''>('');
   const [assignedFilter] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  // Seeded from ?q= so arriving from global search lands here already filtered.
+  const initialSearch = useSearchTermFromUrl();
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [createOpen, setCreateOpen] = useState(false);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);

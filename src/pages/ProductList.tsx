@@ -13,6 +13,7 @@ import {
 import { useCurrentUser } from '../api/auth';
 import type { Product, ProductStatus } from '../types/product';
 import { STATUS_OPTIONS } from '../types/product';
+import { useSearchTermFromUrl } from '../hooks/useSearchTermFromUrl';
 
 const DEBOUNCE_MS = 300;
 
@@ -70,8 +71,10 @@ export function ProductList() {
   const navigate = useNavigate();
   const { data: authData } = useCurrentUser();
   const isAdmin = authData?.user?.role === 'admin';
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  // Seeded from ?q= so arriving from global search lands here already filtered.
+  const initialSearch = useSearchTermFromUrl();
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState<ProductStatus | ''>('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [page, setPage] = useState(1);
