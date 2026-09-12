@@ -39,8 +39,13 @@ import { useCustomersList } from '../api/customers';
 import { useProductsList } from '../api/products';
 import { useCouriersList, useCreateCourier } from '../api/couriers';
 import { ORDER_STATUS_OPTIONS, type Order, type OrderStatus } from '../types/order';
+import type { Customer } from '../types/customer';
 import { API_BASE_URL } from '../utils/constants';
 import { useSearchTermFromUrl } from '../hooks/useSearchTermFromUrl';
+
+function customerOptionMeta(customer: Pick<Customer, 'phone' | 'company'>) {
+  return `${customer.phone || 'No phone'}${customer.company ? ` • ${customer.company}` : ''}`;
+}
 
 function StatusBadge({ status }: { status: OrderStatus }) {
   const map: Record<OrderStatus, { label: string; color: string }> = {
@@ -652,11 +657,31 @@ function OrderDetailsModal({
   const updateOrderStatusMutation = useUpdateOrderStatus();
   const createCourierMutation = useCreateCourier();
   const { data: couriersData, refetch: refetchCouriers } = useCouriersList();
-  const { data: customersData, isLoading: loadingCustomers } = useCustomersList({ limit: 200, page: 1 });
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
+    () => (order.customer ? ({ ...order.customer } as Customer) : null)
+  );
+  const { data: customersData, isLoading: loadingCustomers, isFetching: fetchingCustomers } =
+    useCustomersList({
+      search: customerSearch || undefined,
+      limit: 10,
+      page: 1,
+    });
   const { data: productsData, isLoading: loadingProducts } = useProductsList({ limit: 500, page: 1 });
   const customers = customersData?.data ?? [];
   const products = productsData?.data ?? [];
   const productById = useMemo(() => new Map(products.map((p) => [p._id, p])), [products]);
+  const customerOptions = useMemo(() => {
+    const list = [...customers];
+    if (selectedCustomer && !list.some((c) => c._id === selectedCustomer._id)) {
+      list.unshift(selectedCustomer);
+    }
+    return list.map((customer) => ({
+      value: customer._id,
+      label: customer.name,
+      meta: customerOptionMeta(customer),
+    }));
+  }, [customers, selectedCustomer]);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
 
   const [customerId, setCustomerId] = useState(order.customer?._id ?? '');
@@ -692,10 +717,10 @@ function OrderDetailsModal({
     setShipping(shippingDetailsFromSnapshot(order.shippingLabelSnapshot));
   }, [order._id, order.shippingLabelSnapshot?.savedAt]);
 
-  const selectedCustomer = useMemo(
-    () => customers.find((c) => c._id === customerId),
-    [customers, customerId]
-  );
+  useEffect(() => {
+    setCustomerId(order.customer?._id ?? '');
+    setSelectedCustomer(order.customer ? ({ ...order.customer } as Customer) : null);
+  }, [order._id, order.customer]);
 
   const fillShippingFromCustomer = () => {
     if (!selectedCustomer) return;
@@ -1152,14 +1177,17 @@ function OrderDetailsModal({
                 <SearchableSelect
                   label="Customer"
                   value={customerId}
-                  onChange={setCustomerId}
+                  onChange={(id) => {
+                    setCustomerId(id);
+                    const c =
+                      customers.find((customer) => customer._id === id) ??
+                      (selectedCustomer?._id === id ? selectedCustomer : null);
+                    setSelectedCustomer(c);
+                  }}
+                  onSearchChange={setCustomerSearch}
                   required
-                  loading={loadingCustomers}
-                  options={customers.map((customer) => ({
-                    value: customer._id,
-                    label: customer.name,
-                    meta: `${customer.phone || 'No phone'}${customer.company ? ` • ${customer.company}` : ''}`,
-                  }))}
+                  loading={loadingCustomers || fetchingCustomers}
+                  options={customerOptions}
                   placeholder="Select customer..."
                   searchPlaceholder="Search by name, phone, company..."
                   emptyText="No customers found"
