@@ -20,6 +20,8 @@ export function SearchableSelect({
   emptyText = 'No options found',
   allowClear = true,
   showSelectedDetails = true,
+  onSearchChange,
+  searchDebounceMs = 300,
 }: {
   label: string;
   value: string;
@@ -33,10 +35,16 @@ export function SearchableSelect({
   emptyText?: string;
   allowClear?: boolean;
   showSelectedDetails?: boolean;
+  /** When set, search is delegated to the parent (API) and local filtering is skipped. */
+  onSearchChange?: (query: string) => void;
+  searchDebounceMs?: number;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const onSearchChangeRef = useRef(onSearchChange);
+  onSearchChangeRef.current = onSearchChange;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const serverSearch = Boolean(onSearchChange);
 
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value),
@@ -44,12 +52,13 @@ export function SearchableSelect({
   );
 
   const filteredOptions = useMemo(() => {
+    if (serverSearch) return options;
     const q = query.trim().toLowerCase();
     if (!q) return options;
     return options.filter((option) =>
       `${option.label} ${option.meta ?? ''}`.toLowerCase().includes(q)
     );
-  }, [options, query]);
+  }, [options, query, serverSearch]);
 
   useEffect(() => {
     if (!open) return;
@@ -58,6 +67,20 @@ export function SearchableSelect({
     }
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  useEffect(() => {
+    if (!serverSearch) return;
+    if (!open) {
+      onSearchChangeRef.current?.('');
+      return;
+    }
+    const id = window.setTimeout(() => onSearchChangeRef.current?.(query.trim()), searchDebounceMs);
+    return () => window.clearTimeout(id);
+  }, [query, open, serverSearch, searchDebounceMs]);
+
+  useEffect(() => {
+    if (!open) setQuery('');
   }, [open]);
 
   return (

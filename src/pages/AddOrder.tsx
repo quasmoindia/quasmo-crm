@@ -16,12 +16,19 @@ import {
 import { useCreateOrder } from '../api/orders';
 import { useCustomersList } from '../api/customers';
 import { useProductsList } from '../api/products';
+import type { Customer } from '../types/customer';
+
+function customerOptionMeta(customer: Pick<Customer, 'phone' | 'company'>) {
+  return `${customer.phone || 'No phone'}${customer.company ? ` • ${customer.company}` : ''}`;
+}
 
 export function AddOrder() {
   const navigate = useNavigate();
   const createMutation = useCreateOrder();
 
   const [customerId, setCustomerId] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [specificationNotes, setSpecificationNotes] = useState('');
   const [packingInstructions, setPackingInstructions] = useState('');
   
@@ -31,13 +38,25 @@ export function AddOrder() {
   const [shipping, setShipping] = useState<ShippingDetailsValues>(emptyShippingDetails);
   const shippingTouchedRef = useRef(false);
 
-  // Fetch lists for dropdowns
-  const { data: customersData, isLoading: loadingCustomers } = useCustomersList({ limit: 200, page: 1 });
+  // Same customers API as Customer Management — initial 10, then search via API.
+  const { data: customersData, isLoading: loadingCustomers, isFetching: fetchingCustomers } =
+    useCustomersList({
+      search: customerSearch || undefined,
+      limit: 10,
+      page: 1,
+    });
   const customers = customersData?.data ?? [];
-  const selectedCustomer = useMemo(
-    () => customers.find((c) => c._id === customerId),
-    [customers, customerId]
-  );
+  const customerOptions = useMemo(() => {
+    const list = [...customers];
+    if (selectedCustomer && !list.some((c) => c._id === selectedCustomer._id)) {
+      list.unshift(selectedCustomer);
+    }
+    return list.map((customer) => ({
+      value: customer._id,
+      label: customer.name,
+      meta: customerOptionMeta(customer),
+    }));
+  }, [customers, selectedCustomer]);
 
   const { data: productsData, isLoading: loadingProducts } = useProductsList({ limit: 500, page: 1 });
   const products = productsData?.data ?? [];
@@ -156,25 +175,22 @@ export function AddOrder() {
               value={customerId}
               onChange={(id) => {
                 setCustomerId(id);
-                if (!shippingTouchedRef.current) {
-                  const c = customers.find((customer) => customer._id === id);
-                  if (c) {
-                    setShipping({
-                      shipToName: c.name,
-                      shipToPhone: c.phone ?? '',
-                      shipToAddress: c.address ?? '',
-                      labelCount: '1',
-                    });
-                  }
+                const c = customers.find((customer) => customer._id === id) ?? null;
+                setSelectedCustomer(c);
+                if (!id) return;
+                if (!shippingTouchedRef.current && c) {
+                  setShipping({
+                    shipToName: c.name,
+                    shipToPhone: c.phone ?? '',
+                    shipToAddress: c.address ?? '',
+                    labelCount: '1',
+                  });
                 }
               }}
+              onSearchChange={setCustomerSearch}
               required
-              loading={loadingCustomers}
-              options={customers.map((customer) => ({
-                value: customer._id,
-                label: customer.name,
-                meta: `${customer.phone || 'No phone'}${customer.company ? ` • ${customer.company}` : ''}`,
-              }))}
+              loading={loadingCustomers || fetchingCustomers}
+              options={customerOptions}
               placeholder="Select customer..."
               searchPlaceholder="Search by name, phone, company..."
               emptyText="No customers found"
