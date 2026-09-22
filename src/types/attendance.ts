@@ -1,6 +1,6 @@
 export type EmployeeStatus = 'active' | 'inactive';
 export type AttendanceRecordStatus = 'open' | 'complete' | 'flagged' | 'absent';
-export type PunchDeviceType = 'phone' | 'kiosk' | 'crm';
+export type PunchDeviceType = 'phone' | 'kiosk' | 'crm' | 'system';
 
 export interface Shift {
   _id: string;
@@ -514,7 +514,7 @@ export interface AttendancePunchDetail {
   accuracy: number;
   selfieUrl: string;
   outsideGeofence: boolean;
-  deviceType: 'phone' | 'kiosk' | 'crm';
+  deviceType: 'phone' | 'kiosk' | 'crm' | 'system';
 }
 
 export interface AttendanceSessionDetail {
