@@ -13,6 +13,7 @@ const DEVICE_META: Record<AttendancePunchDetail['deviceType'], { label: string; 
   phone: { label: 'Phone', Icon: FiSmartphone },
   kiosk: { label: 'Kiosk', Icon: FiTablet },
   crm: { label: 'CRM', Icon: FiMonitor },
+  system: { label: 'Auto closed', Icon: FiMonitor },
 };
 
 function fmtTime(iso: string): string {
