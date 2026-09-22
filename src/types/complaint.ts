@@ -8,6 +8,16 @@ export interface ComplaintUser {
   phone?: string;
 }
 
+export interface ComplaintCustomer {
+  _id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  company?: string;
+  address?: string;
+  gstNumber?: string;
+}
+
 export interface ComplaintComment {
   _id: string;
   author: ComplaintUser | string;
@@ -20,6 +30,7 @@ export interface Complaint {
   /** Human-readable ticket id, e.g. QUASMO-CMP-000042 */
   ticketId?: string;
   user: ComplaintUser | string;
+  customer?: ComplaintCustomer | string | null;
   /** User assigned to handle this complaint */
   assignedTo?: ComplaintUser | string | null;
   /** Staff who created the complaint record */
@@ -34,6 +45,9 @@ export interface Complaint {
   description: string;
   /** Optional contact phone for SMS */
   phone?: string;
+  company?: string;
+  address?: string;
+  gstNumber?: string;
   status: ComplaintStatus;
   priority: ComplaintPriority;
   productModel?: string;
@@ -58,9 +72,13 @@ export interface ComplaintsListResponse {
 }
 
 export interface CreateComplaintPayload {
+  customer: string;
   subject: string;
   description: string;
   phone?: string;
+  company?: string;
+  address?: string;
+  gstNumber?: string;
   priority?: ComplaintPriority;
   productModel?: string;
   serialNumber?: string;
@@ -69,9 +87,13 @@ export interface CreateComplaintPayload {
 }
 
 export interface UpdateComplaintPayload {
+  customer?: string | null;
   subject?: string;
   description?: string;
   phone?: string;
+  company?: string;
+  address?: string;
+  gstNumber?: string;
   status?: ComplaintStatus;
   priority?: ComplaintPriority;
   productModel?: string;

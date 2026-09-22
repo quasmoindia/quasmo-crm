@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { FiList, FiGrid, FiUpload, FiFile, FiMessageCircle, FiCopy, FiEdit2, FiCheck, FiX, FiEye, FiTrash2 } from 'react-icons/fi';
 import {
   DndContext,
@@ -15,6 +15,7 @@ import { Input } from '../components/Input';
 import { Card } from '../components/Card';
 import { DataTable } from '../components/DataTable';
 import { TableRowActions } from '../components/TableRowActions';
+import { SearchableSelect } from '../components/SearchableSelect';
 import {
   useComplaintsList,
   useCreateComplaint,
@@ -25,10 +26,12 @@ import {
   useAddComplaintComment,
   useComplaintAssignableUsers,
 } from '../api/complaints';
+import { useCustomersList } from '../api/customers';
 import { useCurrentUser } from '../api/auth';
 import { useSendMessageToPhone } from '../api/messages';
 import type { Complaint, ComplaintStatus, ComplaintPriority, ComplaintComment } from '../types/complaint';
 import { STATUS_OPTIONS, PRIORITY_OPTIONS } from '../types/complaint';
+import type { Customer } from '../types/customer';
 import { useSearchTermFromUrl } from '../hooks/useSearchTermFromUrl';
 
 const KANBAN_LIMIT = 500;
@@ -94,6 +97,33 @@ function PriorityBadge({ priority }: { priority: ComplaintPriority }) {
   );
 }
 
+function customerOptionMeta(customer: Pick<Customer, 'phone' | 'company'>) {
+  return `${customer.phone || 'No phone'}${customer.company ? ` • ${customer.company}` : ''}`;
+}
+
+function customerFromComplaint(complaint: Complaint): Customer | null {
+  const c = complaint.customer;
+  if (typeof c !== 'object' || !c?._id) return null;
+  return {
+    _id: c._id,
+    name: c.name,
+    phone: c.phone,
+    email: c.email,
+    company: c.company,
+    address: c.address,
+    gstNumber: c.gstNumber,
+    createdAt: '',
+    updatedAt: '',
+  };
+}
+
+function customerName(complaint: Complaint) {
+  const c = complaint.customer;
+  if (typeof c === 'object' && c?.name) return c.name;
+  if (complaint.company?.trim()) return complaint.company.trim();
+  return userName(complaint);
+}
+
 function userName(complaint: Complaint) {
   const u = complaint.user;
   if (typeof u === 'object' && u?.fullName) return u.fullName;
@@ -111,28 +141,17 @@ function staffName(field: Complaint['createdBy'] | Complaint['updatedBy'] | Comp
   return '—';
 }
 
-/** Phone on the linked user account (not the complaint contact line). */
-function linkedUserAccountPhone(complaint: Complaint): string | null {
-  if (typeof complaint.user === 'object' && complaint.user?.phone?.trim()) {
-    return complaint.user.phone.trim();
-  }
-  return null;
-}
-
 function userPhone(complaint: Complaint): string | null {
-  const phone = complaint.phone?.trim() || (typeof complaint.user === 'object' && complaint.user?.phone?.trim());
+  const fromCustomer = typeof complaint.customer === 'object' ? complaint.customer?.phone?.trim() : undefined;
+  const phone = complaint.phone?.trim() || fromCustomer || (typeof complaint.user === 'object' && complaint.user?.phone?.trim());
   return phone || null;
 }
 
-/** Contact to message: complaint phone or user phone. Only when we have a phone. */
+/** Contact to message: complaint phone or customer phone. Only when we have a phone. */
 function getMessageTarget(complaint: Complaint): { name: string; phone: string } | null {
-  const phone = complaint.phone?.trim() || (typeof complaint.user === 'object' && complaint.user?.phone?.trim());
+  const phone = userPhone(complaint);
   if (!phone) return null;
-  const name =
-    typeof complaint.user === 'object' && complaint.user?.fullName
-      ? complaint.user.fullName
-      : 'Contact';
-  return { name, phone };
+  return { name: customerName(complaint), phone };
 }
 
 function complaintTicketLabel(c: Complaint): string {
@@ -188,6 +207,7 @@ function buildComplaintCsvRows(complaints: Complaint[]): (string | number)[][] {
   const headers = [
     'Ticket ID',
     'Subject',
+    'Customer',
     'Phone',
     'Assigned to',
     'Status',
@@ -200,6 +220,7 @@ function buildComplaintCsvRows(complaints: Complaint[]): (string | number)[][] {
   const rows = complaints.map((c) => [
     complaintTicketLabel(c),
     c.subject,
+    customerName(c),
     userPhone(c) ?? '',
     assignedToName(c),
     c.status,
@@ -271,7 +292,7 @@ function KanbanCard({
           {complaint.description?.trim() ? (
             <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500">{complaint.description}</p>
           ) : null}
-          <p className="mt-0.5 text-xs text-slate-500">{userName(complaint)}</p>
+          <p className="mt-0.5 text-xs text-slate-500">{customerName(complaint)}</p>
           {userPhone(complaint) && (
             <p className="mt-0.5 text-xs text-slate-400">{userPhone(complaint)}</p>
           )}
@@ -610,6 +631,18 @@ export function ComplaintManagement() {
         </div>
       ),
     },
+    {
+      key: 'customer',
+      label: 'Customer',
+      render: (c: Complaint) => (
+        <div className="min-w-0 max-w-48">
+          <p className="truncate font-medium text-slate-800">{customerName(c)}</p>
+          {typeof c.customer === 'object' && c.customer?.company ? (
+            <p className="truncate text-xs text-slate-500">{c.customer.company}</p>
+          ) : null}
+        </div>
+      ),
+    },
     { key: 'phone', label: 'Phone', render: (c: Complaint) => userPhone(c) ?? '—' },
     { key: 'assignedTo', label: 'Assigned to', render: (c: Complaint) => assignedToName(c) },
     { key: 'status', label: 'Status', render: (c: Complaint) => <StatusBadge status={c.status} /> },
@@ -688,7 +721,7 @@ export function ComplaintManagement() {
                       setSearchQuery(searchInput);
                     }
                   }}
-                  placeholder="Search ticket ID, subject, or description..."
+                  placeholder="Search ticket ID, customer, subject..."
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -713,7 +746,7 @@ export function ComplaintManagement() {
             search={{
               value: searchInput,
               onChange: setSearchInput,
-              placeholder: 'Search ticket ID, subject, or description...',
+              placeholder: 'Search ticket ID, customer, subject...',
               onSearchSubmit: () => setSearchQuery(searchInput),
             }}
             filters={filters}
@@ -824,6 +857,9 @@ function CreateComplaintModal({
 }) {
   const { data: createUsersData } = useComplaintAssignableUsers();
   const createUsers = createUsersData?.data ?? [];
+  const [customerId, setCustomerId] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [phone, setPhone] = useState('');
@@ -834,18 +870,58 @@ function CreateComplaintModal({
   const [orderReference, setOrderReference] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  const { data: customersData, isLoading: loadingCustomers, isFetching: fetchingCustomers } =
+    useCustomersList({
+      search: customerSearch || undefined,
+      limit: 10,
+      page: 1,
+    });
+  const customers = customersData?.data ?? [];
+  const customerOptions = useMemo(() => {
+    const list = [...customers];
+    if (selectedCustomer && !list.some((c) => c._id === selectedCustomer._id)) {
+      list.unshift(selectedCustomer);
+    }
+    return list.map((customer) => ({
+      value: customer._id,
+      label: customer.name,
+      meta: customerOptionMeta(customer),
+    }));
+  }, [customers, selectedCustomer]);
+
+  function handleCustomerChange(id: string) {
+    setCustomerId(id);
+    const customer =
+      customers.find((c) => c._id === id) ??
+      (selectedCustomer?._id === id ? selectedCustomer : null);
+    setSelectedCustomer(customer);
+    if (customer) {
+      setPhone(customer.phone ?? '');
+    } else {
+      setPhone('');
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!customerId || !selectedCustomer) {
+      setError('Please select a customer');
+      return;
+    }
     if (!subject.trim() || !description.trim()) {
       setError('Subject and description are required');
       return;
     }
     mutation.mutate(
       {
+        customer: customerId,
         subject: subject.trim(),
         description: description.trim(),
-        phone: phone.trim() || undefined,
+        phone: phone.trim() || selectedCustomer.phone || undefined,
+        company: selectedCustomer.company || undefined,
+        address: selectedCustomer.address || undefined,
+        gstNumber: selectedCustomer.gstNumber || undefined,
         priority,
         assignedTo: assignedTo || undefined,
         productModel: productModel.trim() || undefined,
@@ -867,6 +943,18 @@ function CreateComplaintModal({
             {error}
           </div>
         )}
+        <SearchableSelect
+          label="Customer"
+          value={customerId}
+          onChange={handleCustomerChange}
+          onSearchChange={setCustomerSearch}
+          required
+          loading={loadingCustomers || fetchingCustomers}
+          options={customerOptions}
+          placeholder="Select customer..."
+          searchPlaceholder="Search by name, phone, company..."
+          emptyText="No customers found"
+        />
         <Input
           label="Subject"
           value={subject}
@@ -984,6 +1072,9 @@ function ComplaintDetailModal({
   const [phone, setPhone] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
   const [editDirty, setEditDirty] = useState(false);
+  const [customerId, setCustomerId] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   // Inline editable fields
   const [editSubject, setEditSubject] = useState('');
@@ -1001,6 +1092,25 @@ function ComplaintDetailModal({
     complaint && (complaint.status === 'in_progress' || complaint.status === 'resolved');
   const images = complaint?.images ?? [];
   const comments = complaint?.comments ?? [];
+
+  const { data: customersData, isLoading: loadingCustomers, isFetching: fetchingCustomers } =
+    useCustomersList({
+      search: customerSearch || undefined,
+      limit: 10,
+      page: 1,
+    });
+  const customers = customersData?.data ?? [];
+  const customerOptions = useMemo(() => {
+    const list = [...customers];
+    if (selectedCustomer && !list.some((c) => c._id === selectedCustomer._id)) {
+      list.unshift(selectedCustomer);
+    }
+    return list.map((customer) => ({
+      value: customer._id,
+      label: customer.name,
+      meta: customerOptionMeta(customer),
+    }));
+  }, [customers, selectedCustomer]);
 
   const MAX_PENDING_ATTACHMENTS = 10;
   const totalAttachmentSlots = MAX_PENDING_ATTACHMENTS - images.length;
@@ -1030,6 +1140,9 @@ function ComplaintDetailModal({
     setInternalNotes(complaint.internalNotes ?? '');
     const a = complaint.assignedTo;
     setAssignedTo(typeof a === 'object' && a?._id ? a._id : typeof a === 'string' ? a : '');
+    const linked = customerFromComplaint(complaint);
+    setSelectedCustomer(linked);
+    setCustomerId(linked?._id ?? '');
   }, [id, complaint]);
   useEffect(() => {
     hasSyncedForComplaintRef.current = false;
@@ -1095,12 +1208,35 @@ function ComplaintDetailModal({
     const currentAssignedId = typeof complaint.assignedTo === 'object' && complaint.assignedTo?._id
       ? complaint.assignedTo._id
       : typeof complaint.assignedTo === 'string' ? complaint.assignedTo : '';
-    const payload: { subject?: string; status?: ComplaintStatus; priority?: ComplaintPriority; phone?: string; internalNotes?: string; assignedTo?: string | null } = {};
+    const currentCustomerId = typeof complaint.customer === 'object' && complaint.customer?._id
+      ? complaint.customer._id
+      : typeof complaint.customer === 'string' ? complaint.customer : '';
+    const payload: {
+      customer?: string | null;
+      subject?: string;
+      status?: ComplaintStatus;
+      priority?: ComplaintPriority;
+      phone?: string;
+      company?: string;
+      address?: string;
+      gstNumber?: string;
+      internalNotes?: string;
+      assignedTo?: string | null;
+    } = {};
     if (newStatus !== complaint.status) payload.status = newStatus;
     if (newPriority !== complaint.priority) payload.priority = newPriority;
     if (newPhone !== currentPhone) payload.phone = newPhone;
     if (newNotes !== currentNotes) payload.internalNotes = newNotes;
     if (assignedTo !== currentAssignedId) payload.assignedTo = assignedTo || null;
+    if (customerId !== currentCustomerId) {
+      payload.customer = customerId || null;
+      if (selectedCustomer) {
+        payload.phone = phone.trim() || selectedCustomer.phone || undefined;
+        payload.company = selectedCustomer.company || undefined;
+        payload.address = selectedCustomer.address || undefined;
+        payload.gstNumber = selectedCustomer.gstNumber || undefined;
+      }
+    }
     const newSubject = editSubject.trim();
     if (newSubject && newSubject !== complaint.subject.trim()) payload.subject = newSubject;
 
@@ -1208,14 +1344,34 @@ function ComplaintDetailModal({
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="min-w-0">
-              <p className="text-sm font-medium text-slate-500">User</p>
-              <p className="wrap-break-word text-slate-800">{userName(complaint)}</p>
-              {linkedUserAccountPhone(complaint) && (
-                <p className="mt-1 text-sm text-slate-600">
-                  <span className="text-slate-500">Account phone: </span>
-                  {linkedUserAccountPhone(complaint)}
-                </p>
-              )}
+              <SearchableSelect
+                label="Customer"
+                value={customerId}
+                onChange={(id) => {
+                  setCustomerId(id);
+                  const customer =
+                    customers.find((c) => c._id === id) ??
+                    (selectedCustomer?._id === id ? selectedCustomer : null);
+                  setSelectedCustomer(customer);
+                  if (customer) {
+                    setPhone(customer.phone ?? '');
+                    setEditPhone(customer.phone ?? '');
+                  }
+                  setEditDirty(true);
+                }}
+                onSearchChange={setCustomerSearch}
+                loading={loadingCustomers || fetchingCustomers}
+                options={customerOptions}
+                placeholder="Select customer..."
+                searchPlaceholder="Search by name, phone, company..."
+                emptyText="No customers found"
+              />
+              {selectedCustomer?.gstNumber ? (
+                <p className="mt-1 text-xs text-slate-500">GST: {selectedCustomer.gstNumber}</p>
+              ) : null}
+              {selectedCustomer?.address ? (
+                <p className="mt-1 text-xs text-slate-500">{selectedCustomer.address}</p>
+              ) : null}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
