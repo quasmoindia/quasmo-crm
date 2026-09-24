@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiPlus, FiFileText, FiUpload, FiDownload, FiList, FiGrid, FiSearch, FiEye, FiArrowRightCircle, FiX } from 'react-icons/fi';
+import QRCode from 'qrcode';
 import {
   DndContext,
   type DragEndEvent,
@@ -123,6 +124,10 @@ type ShippingLabelPrintArgs = {
 };
 
 function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
+  void openShippingLabelPrintWindowAsync(args);
+}
+
+async function openShippingLabelPrintWindowAsync(args: ShippingLabelPrintArgs) {
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
     alert('Please allow popups to print label.');
@@ -145,8 +150,16 @@ function openShippingLabelPrintWindow(args: ShippingLabelPrintArgs) {
   const totalUnits = args.packageLines.reduce((sum, line) => sum + line.quantity, 0);
 
   const website = 'https://www.quasmoindianmicroscope.com/';
-  const qrValue = encodeURIComponent(`${website}?order=${encodeURIComponent(args.orderNumber)}`);
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${qrValue}`;
+  // Embed PNG data URI so print/PDF never depends on api.qrserver.com loading.
+  const qrPayload = `${website}?order=${encodeURIComponent(args.orderNumber)}`;
+  let qrUrl: string;
+  try {
+    qrUrl = await QRCode.toDataURL(qrPayload, { width: 220, margin: 1, errorCorrectionLevel: 'M' });
+  } catch {
+    alert('Could not generate QR code for this label.');
+    printWindow.close();
+    return;
+  }
 
   const labelsHtml = Array.from({ length: args.labelCount }, (_, idx) => {
     const labelNo = `${idx + 1}/${args.labelCount}`;
