@@ -602,7 +602,7 @@ export function AttendanceSettings() {
               label="Company name"
               value={employer.employerName}
               onChange={(e) => setEmployer({ ...employer, employerName: e.target.value })}
-              placeholder="e.g. Quality Scientific & Mechanical Works"
+              placeholder="e.g. IMOS India Pvt. Ltd."
               disabled={!canManageSitesShifts}
             />
           </div>

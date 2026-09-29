@@ -122,7 +122,7 @@ const DEFAULT_FORM: TaxInvoiceEditorForm = {
   signaturePresetId: '' as string,
   shipSameAsBill: false,
   sellerGstin: '06AAAFQ0374K1ZA',
-  sellerName: 'QUALITY SCIENTIFIC & MECHANICAL WORKS',
+  sellerName: 'IMOS India Pvt. Ltd.',
   sellerAddress: 'PLOT NO. 84 HSIDC INDUSTRIAL AREA AMBALA',
   sellerPhonesText: '9215617707\n8926666632',
   sellerEmailsText: 'quasmo.mechanical@gmail.com\nqualitynd@yahoo.com',

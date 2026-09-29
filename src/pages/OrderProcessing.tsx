@@ -196,7 +196,7 @@ async function openShippingLabelPrintWindowAsync(args: ShippingLabelPrintArgs) {
           <div class="footer">
             <img src="${qrUrl}" alt="QR code" class="qr" />
             <div class="company">
-              <p class="name">M/s Quality Scientific and Mechanical Works</p>
+              <p class="name">M/s IMOS India Pvt. Ltd.</p>
               <p># 84,HSIDC, Industrial Area, Ambala cantt-133001</p>
               <p>Mob: +91 8926666632</p>
               <p>Toll Free: 1800 419 4979</p>
