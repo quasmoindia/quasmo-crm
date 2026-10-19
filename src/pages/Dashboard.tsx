@@ -244,14 +244,24 @@ export function Dashboard() {
       to: '/dashboard/expenses',
     },
     canProducts && {
+      id: 'out-of-stock',
+      count: productData?.outOfStockItems ?? 0,
+      label: 'out-of-stock product',
+      labelPlural: 'out-of-stock products',
+      detail: 'Nothing left to sell',
+      tone: 'critical' as const,
+      icon: FiAlertTriangle,
+      to: '/dashboard/products?stock=out',
+    },
+    canProducts && {
       id: 'low-stock',
       count: productData?.lowStockItems ?? 0,
       label: 'low-stock product',
       labelPlural: 'low-stock products',
-      detail: 'At or below reorder level',
+      detail: 'Above zero, at or below reorder level',
       tone: 'warning' as const,
       icon: FiPackage,
-      to: '/dashboard/products',
+      to: '/dashboard/products?stock=low',
     },
   ].filter(Boolean) as TriageItem[];
 
@@ -333,9 +343,21 @@ export function Dashboard() {
       label: 'Catalogue',
       value: productData?.activeProducts ?? 0,
       sub:
-        (productData?.lowStockItems ?? 0) > 0 ? (
+        (productData?.lowStockItems ?? 0) > 0 || (productData?.outOfStockItems ?? 0) > 0 ? (
           <>
-            active · <span className="font-medium text-amber-700">{productData?.lowStockItems} low</span>
+            active
+            {(productData?.outOfStockItems ?? 0) > 0 && (
+              <>
+                {' '}
+                · <span className="font-medium text-rose-700">{productData?.outOfStockItems} out</span>
+              </>
+            )}
+            {(productData?.lowStockItems ?? 0) > 0 && (
+              <>
+                {' '}
+                · <span className="font-medium text-amber-700">{productData?.lowStockItems} low</span>
+              </>
+            )}
           </>
         ) : (
           `active of ${productData?.totalProducts ?? 0}`

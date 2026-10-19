@@ -69,10 +69,15 @@ export interface ProductsListResponse {
   };
 }
 
+export type ProductStockFilter = 'low' | 'out';
+
 export interface ProductAnalytics {
   totalProducts: number;
   activeProducts: number;
+  /** Active products with stock above zero and at or below the reorder level. */
   lowStockItems: number;
+  /** Active products with no units left. */
+  outOfStockItems: number;
   totalCategories: number;
 }
 

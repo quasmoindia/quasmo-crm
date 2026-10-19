@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FiPlus, FiEye, FiEdit2, FiTrash2, FiSearch, FiPackage, FiAlertTriangle, FiLayers } from 'react-icons/fi';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
@@ -11,7 +11,7 @@ import {
   useBulkUpdateProductStock,
 } from '../api/products';
 import { useCurrentUser } from '../api/auth';
-import type { Product, ProductStatus } from '../types/product';
+import type { Product, ProductStatus, ProductStockFilter } from '../types/product';
 import { STATUS_OPTIONS } from '../types/product';
 import { useSearchTermFromUrl } from '../hooks/useSearchTermFromUrl';
 
@@ -48,34 +48,53 @@ function AnalyticsCard({
   value,
   color,
   icon,
+  onClick,
+  active,
 }: {
   label: string;
   value: number | string;
   color: string;
   icon: React.ReactNode;
+  onClick?: () => void;
+  active?: boolean;
 }) {
-  return (
-    <div
-      className={`flex items-center gap-4 rounded-xl border p-5 transition-shadow hover:shadow-md ${color}`}
-    >
+  const className = `flex w-full items-center gap-4 rounded-xl border p-5 text-left transition-shadow hover:shadow-md ${color} ${
+    active ? 'ring-2 ring-offset-1 ring-current' : ''
+  }`;
+  const body = (
+    <>
       <div className="rounded-lg bg-white/80 p-2.5 shadow-sm">{icon}</div>
       <div>
         <p className="text-sm font-medium opacity-80">{label}</p>
         <p className="text-2xl font-bold">{value}</p>
       </div>
-    </div>
+    </>
   );
+  if (!onClick) return <div className={className}>{body}</div>;
+  return (
+    <button type="button" onClick={onClick} className={className} aria-pressed={active}>
+      {body}
+    </button>
+  );
+}
+
+function stockFilterFromParam(value: string | null): ProductStockFilter | '' {
+  return value === 'low' || value === 'out' ? value : '';
 }
 
 export function ProductList() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const stockFilter = stockFilterFromParam(searchParams.get('stock'));
   const { data: authData } = useCurrentUser();
   const isAdmin = authData?.user?.role === 'admin';
   // Seeded from ?q= so arriving from global search lands here already filtered.
   const initialSearch = useSearchTermFromUrl();
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [searchQuery, setSearchQuery] = useState(initialSearch);
-  const [statusFilter, setStatusFilter] = useState<ProductStatus | ''>('');
+  const [statusFilter, setStatusFilter] = useState<ProductStatus | ''>(() =>
+    stockFilterFromParam(searchParams.get('stock')) ? 'active' : ''
+  );
   const [categoryFilter, setCategoryFilter] = useState('');
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
@@ -93,9 +112,19 @@ export function ProductList() {
     status: statusFilter || undefined,
     category: categoryFilter || undefined,
     search: searchQuery || undefined,
+    stock: stockFilter || undefined,
     page,
     limit: 12,
   });
+
+  function setStockFilter(next: ProductStockFilter | '') {
+    setPage(1);
+    if (next) setStatusFilter('active');
+    const params = new URLSearchParams(searchParams);
+    if (next) params.set('stock', next);
+    else params.delete('stock');
+    setSearchParams(params, { replace: true });
+  }
   const deleteMutation = useDeleteProduct();
   const bulkUpdateStockMutation = useBulkUpdateProductStock();
   const products = data?.data ?? [];
@@ -123,7 +152,7 @@ export function ProductList() {
 
       {/* Analytics Cards */}
       {analyticsData && (
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <AnalyticsCard
             label="Total Products"
             value={analyticsData.totalProducts}
@@ -145,10 +174,20 @@ export function ProductList() {
             }
           />
           <AnalyticsCard
-            label="Low Stock Items"
+            label="Low Stock"
             value={analyticsData.lowStockItems}
+            color="border-amber-200 bg-amber-50 text-amber-900"
+            icon={<FiAlertTriangle className="size-5 text-amber-600" />}
+            active={stockFilter === 'low'}
+            onClick={() => setStockFilter(stockFilter === 'low' ? '' : 'low')}
+          />
+          <AnalyticsCard
+            label="Out of Stock"
+            value={analyticsData.outOfStockItems}
             color="border-red-200 bg-red-50 text-red-900"
-            icon={<FiAlertTriangle className="size-5 text-red-600" />}
+            icon={<FiPackage className="size-5 text-red-600" />}
+            active={stockFilter === 'out'}
+            onClick={() => setStockFilter(stockFilter === 'out' ? '' : 'out')}
           />
           <AnalyticsCard
             label="Categories"
@@ -200,6 +239,18 @@ export function ProductList() {
               ))}
             </select>
           </div>
+          <div className="min-w-[160px]">
+            <label className="mb-1 block text-sm font-medium text-slate-700">Stock</label>
+            <select
+              value={stockFilter}
+              onChange={(e) => setStockFilter(stockFilterFromParam(e.target.value))}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="">All stock</option>
+              <option value="low">Low stock</option>
+              <option value="out">Out of stock</option>
+            </select>
+          </div>
           <div className="min-w-[120px]">
             <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
             <select
@@ -235,8 +286,18 @@ export function ProductList() {
       ) : products.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 py-20">
           <FiPackage className="size-12 text-slate-300" />
-          <p className="mt-4 text-lg font-medium text-slate-500">No products found</p>
-          <p className="mt-1 text-sm text-slate-400">Create your first product to get started</p>
+          <p className="mt-4 text-lg font-medium text-slate-500">
+            {stockFilter === 'low'
+              ? 'No low-stock products'
+              : stockFilter === 'out'
+                ? 'No out-of-stock products'
+                : 'No products found'}
+          </p>
+          <p className="mt-1 text-sm text-slate-400">
+            {stockFilter
+              ? 'Nothing matches this stock filter'
+              : 'Create your first product to get started'}
+          </p>
           <Button className="mt-6" onClick={() => navigate('/dashboard/products/new')}>
             <FiPlus className="size-4" aria-hidden />
             Add Product
@@ -266,11 +327,15 @@ export function ProductList() {
                   <div className="absolute right-2 top-2">
                     <StatusBadge status={product.status} />
                   </div>
-                  {product.currentStock <= product.reorderLevel && product.status === 'active' && (
-                    <div className="absolute bottom-2 left-2 rounded-full bg-red-500 px-2.5 py-0.5 text-xs font-semibold text-white shadow-sm">
-                      Low stock! Min: {product.reorderLevel}
+                  {product.currentStock <= 0 ? (
+                    <div className="absolute bottom-2 left-2 rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-semibold text-white shadow-sm">
+                      Out of stock
                     </div>
-                  )}
+                  ) : product.currentStock <= product.reorderLevel && product.status === 'active' ? (
+                    <div className="absolute bottom-2 left-2 rounded-full bg-amber-500 px-2.5 py-0.5 text-xs font-semibold text-white shadow-sm">
+                      Low stock · min {product.reorderLevel}
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Content */}
@@ -295,7 +360,7 @@ export function ProductList() {
                     </div>
                     <div>
                       <p className="text-xs text-slate-400">Stock</p>
-                      <p className={`font-semibold ${product.currentStock <= product.reorderLevel ? 'text-red-600' : 'text-emerald-600'}`}>
+                      <p className={`font-semibold ${product.currentStock <= 0 ? 'text-red-600' : product.currentStock <= product.reorderLevel ? 'text-amber-600' : 'text-emerald-600'}`}>
                         {product.currentStock} {product.unit}
                       </p>
                     </div>

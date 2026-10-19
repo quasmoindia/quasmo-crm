@@ -10,6 +10,7 @@ import type {
   BulkProductStockUpdateItem,
   ProductCategory,
   ProductStatus,
+  ProductStockFilter,
 } from '../types/product';
 
 const PRODUCTS_BASE = '/products';
@@ -23,12 +24,14 @@ export function listProductsApi(params: {
   status?: ProductStatus;
   category?: string;
   search?: string;
+  stock?: ProductStockFilter;
   page?: number;
   limit?: number;
 }) {
   const search = new URLSearchParams();
   if (params.status) search.set('status', params.status);
   if (params.category) search.set('category', params.category);
+  if (params.stock) search.set('stock', params.stock);
   if (params.search?.trim()) search.set('search', params.search.trim());
   if (params.page != null) search.set('page', String(params.page));
   if (params.limit != null) search.set('limit', String(params.limit));
@@ -118,6 +121,7 @@ export function useProductsList(params: {
   status?: ProductStatus;
   category?: string;
   search?: string;
+  stock?: ProductStockFilter;
   page?: number;
   limit?: number;
 }) {
